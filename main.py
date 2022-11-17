@@ -1,24 +1,33 @@
 import bpy
 import bmesh
 
+bpy.types.Object.custom_float_vector_temp = bpy.props.FloatVectorProperty(name = "Force Application Temp")
 
+bpy.data.objects[0].custom_float_vector_temp = (3.0,1.0,0.0)
 
 class ApplyForceDialogueOperator(bpy.types.Operator):
     bl_idname = "objects.apply_force_dialogue"
     bl_label = "Choose forces to apply"
     
     name = bpy.props.StringProperty(name = "Object Selected:", default = "Cube") #CHANGE DEFAULT LATER
-    forces = [bpy.props.FloatProperty(name = "Force:", default = 1.0) for n in len(getSelected(bpy.context.active_object))]
+    #forces = [bpy.props.FloatProperty(name = "Force:", default = 1.0) for n in len(getSelected(bpy.context.active_object))]
+    force = bpy.props.FloatVectorProperty(name = "Force:", default = (1.0, 0.0, 0.0)) #Default force is 1 along x axis
     
     def execute(self,context):
-        ForceObject(bpy.context.active_object)
+        createForceObject(force = self.force)
+        self.report({'INFO'}, "Added Force Object")
+        return {'FINISHED'}
+        
+    def invoke(self,context,event):
+        wm = context.window_manager
+        return wm.invoke_props_dialog(self)
 
 """class ForceFace:
     def __init__(self, force):
         self.force = force"""
 
 class ForceObject:
-    def __init__(self, obj):
+    def __init__(self, obj, force):
         self.obj = obj
         self.forces = {} #Dictionary mapping force amounts and faces
         
@@ -30,6 +39,11 @@ class ForceObject:
         for i in range(len(forceBools)):
             if (forceBools[i]):
                 self.forces[i] = 1 #Applies an initial force of 1 to selected surface of object
+
+def createForceObject(force, name = bpy.context.active_object):
+    fo = ForceObject(name, force)
+    
+    
 
 #Conveinient constants
 CTX = bpy.context
@@ -57,6 +71,6 @@ OPS.object.mode_set(mode = 'EDIT')
 def getSelected(obj):
         return [x.select for x in (obj).data.polygons]
 
-ham = raw_input()
+
 
 print(getSelected(obj))
