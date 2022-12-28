@@ -1,7 +1,7 @@
 import bpy
 import bmesh
 import math
-
+import random
 
 
 class ApplyForceDialogueOperator(bpy.types.Operator):
@@ -12,7 +12,7 @@ class ApplyForceDialogueOperator(bpy.types.Operator):
     force = bpy.props.FloatVectorProperty(name = "Force:", default = (1.0,1.0,1.0))
     
     def execute(self,context):
-        ForceObject(bpy.context.active_object, self.name, self.force)
+        ForceObject(bpy.context.active_object, self.force)
         self.report({'INFO'}, "Made Force Object")
         return {'FINISHED'}
     
@@ -97,12 +97,17 @@ class VectorTup:
     def get_magnitude(self):
         return math.sqrt(self.x * self.x + self.y * self.y + self.z * self.z)
     
+    def as_tup(self):
+        return (self.x, self.y, self.z)
+    
+    
     
 
 class ForceObject:
     def __init__(self, obj, edges): #Blender Obj, Str, [ForceVertex]
         self.obj = obj #Bound blender object
         self.edges = edges #array of VertPair objects making up force object
+
 
     def __add__(self, other): #Adds to list of edges of object
         temp = ForceObject(self.obj, self.name, self.edges)
@@ -121,6 +126,58 @@ class ForceObject:
             temp += "\n"
             i += 1
         return temp
+    
+    def apply_random_forces(self, frange): #Tuple [2] specifying min and max values
+        for edge in self.edges:
+            temp_vec = make_random_vector(frange)
+            temp_loc = random.random() #Will never generate 1 but will not matter because it will be close
+            edge.apply_force(temp_vec, temp_loc)
+            
+    def extract_verts(self):
+        temp_verts = []
+        for edge in self.edges:
+            if edge.one not in temp_verts:
+                temp_verts.append(edge.one)
+            if edge.two not in temp_verts:
+                temp_verts.append(edge.two)
+        return temp_verts
+            
+    def mesh_link(self, other, link_type = "CLOSEST", num_links = 2):
+        extracted = self.extract_verts()
+        other_extracted = other.extract_verts()
+        new_edges = []
+        if num_links < 1:
+            num_links = 1
+        #min_dist = [9999] * num_links
+        temp_dist = 0
+        #temp_closest = [None] * num_links
+        if link_type == "CLOSEST":
+            for vert in extracted:
+                min_dist = [9999] * num_links
+                temp_closest = [None] * num_links
+                for vert2 in other_extracted:
+                    temp_dist = vert.get_euclidean_distance(vert2)
+                    min_dist, flag = min_add(min_dist, temp_dist)
+                    if flag:
+                        temp_closest = vert2 + temp_closest[:-1] #add to beginning and pop last
+                if None not in temp_closest:
+                    for vtc in temp_closest:
+                        new_edges.append(VertPair(vert, vtc))
+                else:
+                    print("ERROR")
+            self.edges.extend(new_edges)
+            self.edges.extend(other.edges)
+                
+                
+def min_add(iterable, val): #Utility function adding a value to a queue style iterable, maintaining sorting from smallest to largest
+    for i, item in enumerate(iterable):
+        if val < item:
+            iterable = iterable[:i] + val + iterable[i:(len(iterable)-1)]
+            return iterable, True
+    return iterable, False
+            
+
+        
         
 class ForceVertex:
     def __init__(self, loc, dir):
@@ -129,6 +186,19 @@ class ForceVertex:
         
     def get_magnitude(self):
         return self.dir.get_magnitude()
+    
+    def __repr__(self):
+        return f"ForceVertex: (loc:{self.loc}, dir:{self.dir})"
+    
+    def __str__(self):
+        return f"(loc:{self.loc}, dir:{self.dir})"
+    
+    def apply_force(self, force):
+        self.dir = self.dir + force 
+        
+    def get_euclidean_distance(self, other):
+        return math.dist(self.loc.as_tup(), other.loc.as_tup())
+        
     
 class VertPair: # For holding a pair of ForceVertex objects, these pairs indicate a link between two vertices used in the final lattice
     def __init__(self, one, two):
@@ -147,11 +217,19 @@ class VertPair: # For holding a pair of ForceVertex objects, these pairs indicat
     def __repr__(self):
         return f"VertPair: ({self.one}, {self.two})"
     
+    def apply_force(self, force, loc): #loc is a value between 0 and 1 specifying where along the edge the force is applied, 0 being vert 1 and 1 being vert 2
+        self.one.apply_force(force * loc)
+        self.two.apply_force(force * (1-loc))
+    
 #Creates a force object simply using raw vertex and edge data 
 def force_obj_from_raw(obj): #Obj is object identifier
-    temp_obj = bpy.data.objects[obj]
+    if isinstance(obj, str):
+        temp_obj = bpy.data.objects[obj]
+    else:
+        temp_obj = obj
     temp_dat = temp_obj.data
     vert_num = len(temp_dat.vertices)
+    print(vert_num)
     edge_num = len(temp_dat.edges)
     #face_num = len(temp_dat.polygons)
     
@@ -166,8 +244,11 @@ def force_obj_from_raw(obj): #Obj is object identifier
         global_edges.append(VertPair(global_verts[edge_verts[0]], global_verts[edge_verts[1]]))
         
     return ForceObject(temp_obj, global_edges)
-    
 
+        
+def make_random_vector(frange):
+    return VectorTup(random.uniform(frange[0],frange[1]), random.uniform(frange[0],frange[1]), random.uniform(frange[0], frange[1]))
+    
 
 #Conveinient constants
 CTX = bpy.context
@@ -175,19 +256,19 @@ DAT = bpy.data
 OPS = bpy.ops
 
 
-OPS.object.mode_set(mode = 'OBJECT')
-OPS.object.select_all(action = 'SELECT')
-OPS.object.delete(use_global = False)
-OPS.mesh.primitive_cube_add(size = 2, enter_editmode = False, align = 'WORLD', location = (0,0,0), rotation=(0.2,1.2,1))
+#OPS.object.mode_set(mode = 'OBJECT')
+#OPS.object.select_all(action = 'SELECT')
+#OPS.object.delete(use_global = False)
+#OPS.mesh.primitive_cube_add(size = 2, enter_editmode = False, align = 'WORLD', location = (0,0,0), rotation=(0.2,1.2,1))
 #obj = bpy.data.objects["CUBE"]
 
 obj = CTX.active_object
-OPS.object.mode_set(mode = 'EDIT')
-OPS.mesh.select_mode(type = 'FACE')
-OPS.mesh.select_all(action = 'DESELECT')
-OPS.object.mode_set(mode = 'OBJECT')
-obj.data.polygons[0].select = True
-OPS.object.mode_set(mode = 'EDIT')
+#OPS.object.mode_set(mode = 'EDIT')
+#OPS.mesh.select_mode(type = 'FACE')
+#OPS.mesh.select_all(action = 'DESELECT')
+#OPS.object.mode_set(mode = 'OBJECT')
+#obj.data.polygons[0].select = True
+#OPS.object.mode_set(mode = 'EDIT')
 
 #def getSelected(obj): #Gets selected faces of object INPUTS: bpy.context.obj object (for current object use bpy.context.active_object)  RETURNS: [Boolean]
 #    return [x.select for x in obj.data.polygons]
@@ -196,8 +277,10 @@ def getSelected(obj):
         return [x.select for x in (obj).data.polygons]
 
 
-bpy.utils.register_class(ApplyForceDialogueOperator)
-bpy.ops.object.apply_force_dialogue('INVOKE_DEFAULT')
-
-print(getSelected(obj))
+#bpy.utils.register_class(ApplyForceDialogueOperator)
+#bpy.ops.object.apply_force_dialogue('INVOKE_DEFAULT')
+fobj1 = force_obj_from_raw(bpy.context.view_layer.objects.active)
+fobj1.apply_random_forces((-1,12))
+fobj1.extract_verts()
+#print(fobj1)
 
