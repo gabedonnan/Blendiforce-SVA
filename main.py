@@ -127,6 +127,9 @@ class ForceObject:
             i += 1
         return temp
     
+    def __len__(self):
+        return len(self.edges)
+    
     def apply_random_forces(self, frange): #Tuple [2] specifying min and max values
         for edge in self.edges:
             temp_vec = make_random_vector(frange)
@@ -141,38 +144,69 @@ class ForceObject:
             if edge.two not in temp_verts:
                 temp_verts.append(edge.two)
         return temp_verts
-            
-    def mesh_link(self, other, link_type = "CLOSEST", num_links = 2):
+    
+    #Creates n links from each vertex in object 1 to vertices in object two        
+    def mesh_link(self, other, link_type = "CLOSEST", num_links = 2): 
         extracted = self.extract_verts()
         other_extracted = other.extract_verts()
         new_edges = []
+        num_links = int(num_links)
         if num_links < 1:
             num_links = 1
-        #min_dist = [9999] * num_links
         temp_dist = 0
-        #temp_closest = [None] * num_links
         if link_type == "CLOSEST":
             for vert in extracted:
                 min_dist = [9999] * num_links
                 temp_closest = [None] * num_links
                 for vert2 in other_extracted:
-                    temp_dist = vert.get_euclidean_distance(vert2)
+                    temp_dist = vert.get_euclidean_distance(vert2) # Gets euclidean distance between initial and second vert
                     min_dist, flag = min_add(min_dist, temp_dist)
                     if flag:
-                        temp_closest = vert2 + temp_closest[:-1] #add to beginning and pop last
+                        temp_closest = [vert2] + temp_closest[:-1] #add to beginning and pop last
                 if None not in temp_closest:
                     for vtc in temp_closest:
                         new_edges.append(VertPair(vert, vtc))
                 else:
                     print("ERROR")
+            #print(other.edges)
             self.edges.extend(new_edges)
             self.edges.extend(other.edges)
+            
+    #Creates n links from each vertex of every object to vertices in other objects in the list        
+    def mesh_link_chain(self, others, link_type = "CLOSEST", num_links = 2): 
+        extracted = [self.extract_verts()]
+        for item in others:
+            extracted.append(item.extract_verts())
+        new_edges = []
+        num_links = int(num_links)
+        if num_links < 1:
+            num_links = 1
+        temp_dist = 0
+        if link_type == "CLOSEST": #NEEDS DEBUGGING
+            for i, mesh in enumerate(extracted): #Extracted formatted as such[[], [], [], []]
+                for vert in mesh:
+                    min_dist = [9999] * num_links
+                    temp_closest = [None] * num_links
+                    for j in (n for n in range(len(extracted)) if n != i): #All indices of list other than i
+                        for vert2 in extracted[j]: #Iterates through all vertices from non-active objects
+                            temp_dist = vert.get_euclidean_distance(vert2) # Gets euclidean distance between initial and second vert
+                            min_dist, flag = min_add(min_dist, temp_dist)
+                            if flag:
+                                temp_closest = [vert2] + temp_closest[:-1] #add to beginning and pop last
+                    for vtc in temp_closest:
+                        if VertPair(vtc,vert) not in new_edges: #Checks if the link has already been created in the other direction
+                            new_edges.append(VertPair(vert, vtc))
+
+            #print(other.edges)
+            self.edges.extend(new_edges)
+            for other in others:
+                self.edges.extend(other.edges)
                 
-                
-def min_add(iterable, val): #Utility function adding a value to a queue style iterable, maintaining sorting from smallest to largest
+#Utility function adding a value to a queue style iterable, maintaining sorting from smallest to largest
+def min_add(iterable, val): 
     for i, item in enumerate(iterable):
         if val < item:
-            iterable = iterable[:i] + val + iterable[i:(len(iterable)-1)]
+            iterable = iterable[:i] + [val] + iterable[i:(len(iterable)-1)]
             return iterable, True
     return iterable, False
             
@@ -199,17 +233,18 @@ class ForceVertex:
     def get_euclidean_distance(self, other):
         return math.dist(self.loc.as_tup(), other.loc.as_tup())
         
-    
-class VertPair: # For holding a pair of ForceVertex objects, these pairs indicate a link between two vertices used in the final lattice
+# For holding a pair of ForceVertex objects, these pairs indicate a link between two vertices used in the final lattice
+class VertPair: 
     def __init__(self, one, two):
         self.one = one
         self.two = two
         
+    #Equality checks if contains same two elements in either slot
     def __eq__(self, other):
-        return (self.one == other.one and self.two == other.two)
+        return (self.one == other.one and self.two == other.two) or (self.one == other.two and self.two == other.one)
     
     def __ne__(self, other):
-        return not(self.one == other.one and self.two == other.two)
+        return not((self.one == other.one and self.two == other.two) or (self.one == other.two and self.two == other.one))
     
     def __str__(self):
         return f"({self.one.__str__()}, {self.two.__str__()})"
@@ -217,7 +252,8 @@ class VertPair: # For holding a pair of ForceVertex objects, these pairs indicat
     def __repr__(self):
         return f"VertPair: ({self.one}, {self.two})"
     
-    def apply_force(self, force, loc): #loc is a value between 0 and 1 specifying where along the edge the force is applied, 0 being vert 1 and 1 being vert 2
+    #loc is a value between 0 and 1 specifying where along the edge the force is applied, 0 being vert 1 and 1 being vert 2
+    def apply_force(self, force, loc): 
         self.one.apply_force(force * loc)
         self.two.apply_force(force * (1-loc))
     
@@ -229,7 +265,7 @@ def force_obj_from_raw(obj): #Obj is object identifier
         temp_obj = obj
     temp_dat = temp_obj.data
     vert_num = len(temp_dat.vertices)
-    print(vert_num)
+    #print(vert_num)
     edge_num = len(temp_dat.edges)
     #face_num = len(temp_dat.polygons)
     
@@ -274,13 +310,22 @@ obj = CTX.active_object
 #    return [x.select for x in obj.data.polygons]
 
 def getSelected(obj):
-        return [x.select for x in (obj).data.polygons]
+    return [x.select for x in (obj).data.polygons]
 
 
 #bpy.utils.register_class(ApplyForceDialogueOperator)
 #bpy.ops.object.apply_force_dialogue('INVOKE_DEFAULT')
-fobj1 = force_obj_from_raw(bpy.context.view_layer.objects.active)
-fobj1.apply_random_forces((-1,12))
-fobj1.extract_verts()
+fobjects = []
+for ob in bpy.data.objects:
+    print(ob.name)
+    fobjects.append(force_obj_from_raw(ob))
+#fobj1 = force_obj_from_raw(bpy.context.view_layer.objects.active)
+#fobj1.apply_random_forces((-1,12))
+#fobj1.extract_verts()
 #print(fobj1)
+print(len(fobjects[0]))
+
+#fobjects[0].mesh_link(fobjects[1])
+fobjects[0].mesh_link_chain(fobjects[1:])
+print(len(fobjects[0]))
 
