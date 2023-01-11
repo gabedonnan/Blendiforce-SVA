@@ -102,7 +102,7 @@ class VectorTup:
     
     
     
-
+#Object populated with edges
 class ForceObject:
     def __init__(self, obj, edges): #Blender Obj, Str, [ForceVertex]
         self.obj = obj #Bound blender object
@@ -182,7 +182,7 @@ class ForceObject:
         if num_links < 1:
             num_links = 1
         temp_dist = 0
-        if link_type == "CLOSEST": #NEEDS DEBUGGING
+        if link_type == "CLOSEST":
             for i, mesh in enumerate(extracted): #Extracted formatted as such[[], [], [], []]
                 for vert in mesh:
                     min_dist = [9999] * num_links
@@ -196,11 +196,31 @@ class ForceObject:
                     for vtc in temp_closest:
                         if VertPair(vtc,vert) not in new_edges: #Checks if the link has already been created in the other direction
                             new_edges.append(VertPair(vert, vtc))
-
-            #print(other.edges)
+                            
             self.edges.extend(new_edges)
             for other in others:
                 self.edges.extend(other.edges)
+    
+    #Creates a finite element model from a mesh
+    def to_finite(self, mat):
+        final_finite = FEModel3D()
+        extracted = self.extract_verts()
+        E, G, Iy, Iz, J, A = mat.as_list()
+        for node in extracted:
+            final_finite.add_node(str(node),node.loc[0],node.loc[1],node.loc[2])
+        for j,edge in enumerate(self.edges):
+            final_finite.add_member("C" + str(j),str(edge[0]) ,str(edge[1]) ,E, G, Iy, Iz, J, A)
+        for k,fnode in enumerate(extracted):
+            final_finite.add_node_load(str(fnode), Direction = 'FX', P = fnode.dir.x, 
+                                                            case = "Case " + str(k))
+            final_finite.add_node_load(str(fnode), Direction = 'FY', P = fnode.dir.y, 
+                                                            case = "Case " + str(k))
+            final_finite.add_node_load(str(fnode), Direction = 'FZ', P = fnode.dir.z, 
+                                                            case = "Case " + str(k))
+        return final_finite
+            
+            
+       
                 
 #Utility function adding a value to a queue style iterable, maintaining sorting from smallest to largest
 def min_add(iterable, val): 
@@ -211,7 +231,61 @@ def min_add(iterable, val):
     return iterable, False
             
 
+class Material:
+    def __init__(self, name, E, G, Iy, Iz, J, A):
+        self.name = name
+        self.E = E 
+        self.G = G
+        self.Iy = Iy
+        self.Iz = Iz
+        self.J = J
+        self.A = A
         
+    def __repr__(self):
+        return ("Material: " + self.name + " [" + str(self.E) + ", " + str(self.G) + 
+                        ", " + str(self.Iy), + ", " + str(self.Iz) + ", " + 
+                        str(self.J) + ", " + str(self.A) + "]")
+                        
+    def __str__(self):
+        return (self.name + " [E:" + str(self.E) + ", G:" + str(self.G) + 
+                        ", Iy:" + str(self.Iy), + ", Iz:" + str(self.Iz) + ", J:" + 
+                        str(self.J) + ", A:" + str(self.A) + "]")
+    
+    def __getitem__(self, key):
+        if key == 0 or key == "E":
+            return self.E
+        elif key == 1 or key == "G":
+            return self.G
+        elif key == 2 or key == "Iy":
+            return self.Iy
+        elif key == 3 or key == "Iz":
+            return self.Iz
+        elif key == 4 or key == "J":
+            return self.J
+        elif key == 5 or key == "A":
+            return self.A
+        raise Exception("Invalid key: Material")
+        
+    def __setitem__(self, key, value):
+        if key == 0 or key == "E":
+            self.E = value
+        elif key == 1 or key == "G":
+            self.G = value
+        elif key == 2 or key == "Iy":
+            self.Iy = value
+        elif key == 3 or key == "Iz":
+            self.Iz = value
+        elif key == 4 or key == "J":
+            self.J = value
+        elif key == 5 or key == "A":
+            self.A = value
+        raise Exception("Invalid Key: Material")
+    
+    def __len__(self):
+        return 6
+                        
+    def as_list(self):
+        return [self.E, self.G, self.Iy, self.Iz, self.J, self.A] 
         
 class ForceVertex:
     def __init__(self, loc, dir):
@@ -233,7 +307,8 @@ class ForceVertex:
     def get_euclidean_distance(self, other):
         return math.dist(self.loc.as_tup(), other.loc.as_tup())
         
-# For holding a pair of ForceVertex objects, these pairs indicate a link between two vertices used in the final lattice
+#For holding a pair of ForceVertex objects, 
+#these pairs indicate a link between two vertices used in the final lattice
 class VertPair: 
     def __init__(self, one, two):
         self.one = one
@@ -252,6 +327,13 @@ class VertPair:
     def __repr__(self):
         return f"VertPair: ({self.one}, {self.two})"
     
+    def __getitem__(self, key):
+        if key == 0:
+            return self.one
+        if key == 1:
+            return self.two
+        raise Exception("Invalid Key: VertPair")
+    
     #loc is a value between 0 and 1 specifying where along the edge the force is applied, 0 being vert 1 and 1 being vert 2
     def apply_force(self, force, loc): 
         self.one.apply_force(force * loc)
@@ -265,9 +347,7 @@ def force_obj_from_raw(obj): #Obj is object identifier
         temp_obj = obj
     temp_dat = temp_obj.data
     vert_num = len(temp_dat.vertices)
-    #print(vert_num)
     edge_num = len(temp_dat.edges)
-    #face_num = len(temp_dat.polygons)
     
     global_verts = [] #Array of ForceVertex objects translated to global coordinates from local
     global_edges = []
@@ -319,6 +399,7 @@ fobjects = []
 for ob in bpy.data.objects:
     print(ob.name)
     fobjects.append(force_obj_from_raw(ob))
+    fobjects[-1].apply_random_forces((-4,7))
 #fobj1 = force_obj_from_raw(bpy.context.view_layer.objects.active)
 #fobj1.apply_random_forces((-1,12))
 #fobj1.extract_verts()
@@ -327,5 +408,6 @@ print(len(fobjects[0]))
 
 #fobjects[0].mesh_link(fobjects[1])
 fobjects[0].mesh_link_chain(fobjects[1:])
-print(len(fobjects[0]))
+print(fobjects[0])
+
 
