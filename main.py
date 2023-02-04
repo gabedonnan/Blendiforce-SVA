@@ -287,9 +287,9 @@ class Material:
 
 
 class ForceVertex:
-    def __init__(self, loc, dir):
+    def __init__(self, loc, direction):
         self.loc = loc  # (x, y, z) tuple
-        self.dir = dir  # VectorTup object
+        self.dir = direction  # VectorTup object
 
     def get_magnitude(self):
         return self.dir.get_magnitude()
@@ -393,8 +393,9 @@ fobjects[0].mesh_link_chain(fobjects[1:])
 print(fobjects[0])
 
 
+# https://vividfax.github.io/2021/01/14/blender-materials.html
 # Creates and returns a new empty blender material with [name: material_name]
-def create_new_material(material_name): #https://vividfax.github.io/2021/01/14/blender-materials.html#:~:text=Assign%20a%20material%20to%20an%20object%20in%20Blender%20using%20Python&text=The%20function%20takes%20a%20string%20as%20the%20name%20for%20the%20new%20material.&text=Then%20add%20a%20shader%20to,glossy)%20and%20the%20rgb%20colour.&text=Then%20create%20the%20object%2C%20assign%20the%20material%20and%20call%20the%20function.
+def create_new_material(material_name):
     mat = bpy.data.materials.get(material_name)
     if mat is None:  # If material does not yet exist, creates it
         mat = bpy.data.materials.new(name = material_name)
@@ -405,6 +406,7 @@ def create_new_material(material_name): #https://vividfax.github.io/2021/01/14/b
     return mat
 
 
+# https://vividfax.github.io/2021/01/14/blender-materials.html
 # Creates and returns a blender material with [name: material_name, emission colour: rgb: (r,g,b,1)]
 def create_new_shader(material_name, rgb):
     mat = create_new_material(material_name)
@@ -420,10 +422,11 @@ def create_new_shader(material_name, rgb):
 
 # Representation of a blender object to be rendered in the scene
 class Blobject:
-    def __init__(self, name, verts, edges, faces):
+    def __init__(self, name, verts, edges, edge_keys,  faces):
         self.name = name
         self.verts = verts
-        self.edges = edges
+        self.edges = edges # Make sure these are of form bpy.context.object.data.edges
+        self.edge_keys = edge_keys # Make sure these are of form bpy.context.object.data.edge_keys
         self.faces = faces  # Faces should only be visible faces
         self.materials = []
         for i in range(0, 255, 15):
@@ -443,7 +446,15 @@ class Blobject:
         # bpy.context.collection.objects.link(obj_final) is also an option if I dont want to return
         # Returns a final object to be rendered in the scene
 
-    def create_colour_map(self, obj_mesh):
+    def create_colour_map(self, n):
         # Assigns appropriate colours to each face of an object based on forces
+        # For each vertex in each face evaluate average nearby forces (depth = n)
+        # Possibly change n to represent distance, depending on object
+        face_edge_map = {ek: self.edges[i] for i, ek in enumerate(self.edge_keys)} #
+        # Need to restructure edges vertices and faces to allow for easier searching
+        # Faces consist of n vertex indices
+        for face in self.faces:
+            for vert_num in face:
+
         pass
 
