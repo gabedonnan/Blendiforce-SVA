@@ -350,7 +350,6 @@ def force_obj_from_raw(obj):  # Obj is object identifier
     temp_dat = temp_obj.data
     vert_num = len(temp_dat.vertices)
     edge_num = len(temp_dat.edges)
-
     global_verts = []  # Array of ForceVertex objects translated to global coordinates from local
     global_edges = []
     for i in range(vert_num):
@@ -369,62 +368,42 @@ def make_random_vector(frange):
                      random.uniform(frange[0], frange[1]))
 
 
-# Conveinient constants
+# Convenient constants
 CTX = bpy.context
 DAT = bpy.data
 OPS = bpy.ops
 
-# OPS.object.mode_set(mode = 'OBJECT')
-# OPS.object.select_all(action = 'SELECT')
-# OPS.object.delete(use_global = False)
-# OPS.mesh.primitive_cube_add(size = 2, enter_editmode = False, align = 'WORLD', location = (0,0,0), rotation=(0.2,1.2,1))
-# obj = bpy.data.objects["CUBE"]
 
 obj = CTX.active_object
 
 
-# OPS.object.mode_set(mode = 'EDIT')
-# OPS.mesh.select_mode(type = 'FACE')
-# OPS.mesh.select_all(action = 'DESELECT')
-# OPS.object.mode_set(mode = 'OBJECT')
-# obj.data.polygons[0].select = True
-# OPS.object.mode_set(mode = 'EDIT')
-
-# def getSelected(obj): #Gets selected faces of object INPUTS: bpy.context.obj object (for current object use bpy.context.active_object)  RETURNS: [Boolean]
-#    return [x.select for x in obj.data.polygons]
-
-def getSelected(obj):
-    return [x.select for x in (obj).data.polygons]
+def getSelected(object_instance):
+    return [x.select for x in object_instance.data.polygons]
 
 
-# bpy.utils.register_class(ApplyForceDialogueOperator)
-# bpy.ops.object.apply_force_dialogue('INVOKE_DEFAULT')
 fobjects = []
 for ob in bpy.data.objects:
     print(ob.name)
     fobjects.append(force_obj_from_raw(ob))
     fobjects[-1].apply_random_forces((-4, 7))
-# fobj1 = force_obj_from_raw(bpy.context.view_layer.objects.active)
-# fobj1.apply_random_forces((-1,12))
-# fobj1.extract_verts()
-# print(fobj1)
 print(len(fobjects[0]))
 
 # fobjects[0].mesh_link(fobjects[1])
 fobjects[0].mesh_link_chain(fobjects[1:])
 print(fobjects[0])
 
+
 # Creates and returns a new empty blender material with [name: material_name]
 def create_new_material(material_name): #https://vividfax.github.io/2021/01/14/blender-materials.html#:~:text=Assign%20a%20material%20to%20an%20object%20in%20Blender%20using%20Python&text=The%20function%20takes%20a%20string%20as%20the%20name%20for%20the%20new%20material.&text=Then%20add%20a%20shader%20to,glossy)%20and%20the%20rgb%20colour.&text=Then%20create%20the%20object%2C%20assign%20the%20material%20and%20call%20the%20function.
-    #Creates new material
     mat = bpy.data.materials.get(material_name)
-    if mat is None: #If material does not yet exist, creates it
+    if mat is None:  # If material does not yet exist, creates it
         mat = bpy.data.materials.new(name = material_name)
-    mat.use_nodes = True #Uses blender nodes
+    mat.use_nodes = True  # Uses blender nodes
     if mat.node_tree:
         mat.node_tree.links.clear()
         mat.node_tree.nodes.clear()
     return mat
+
 
 # Creates and returns a blender material with [name: material_name, emission colour: rgb: (r,g,b,1)]
 def create_new_shader(material_name, rgb):
@@ -435,7 +414,7 @@ def create_new_shader(material_name, rgb):
     shader = nodes.new(type = "ShaderNodeEmission")
     nodes["Emission"].inputs[0].default_value = rgb
     nodes["Emission"].inputs[1].default_value = 1
-    links.new(shader.outputs[0], output.inputs[0]) #Links output of emission shader to input of the material output
+    links.new(shader.outputs[0], output.inputs[0])  # Links output of emission shader to input of the material output
     return mat
 
 
@@ -447,11 +426,10 @@ class Blobject:
         self.edges = edges
         self.faces = faces  # Faces should only be visible faces
         self.materials = []
-        for i in range(0, 1.1, 0.1):
-            self.materials.append(create_new_shader(str(i), (i,i,i,1)))
+        for i in range(0, 255, 15):
+            self.materials.append(create_new_shader(str(i), (i, 0, 255 - i, 1)))
 
-
-    # upon calling the object like x() where x is of type Blobject, runs this function
+    # Upon calling the object like x() where x is of type Blobject, runs this function
     def __call__(self):
         obj_mesh = bpy.data.meshes.new(self.name + "Mesh")
         obj_final = bpy.data.objects.new(self.name, obj_mesh)
