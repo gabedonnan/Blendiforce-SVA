@@ -491,9 +491,15 @@ class Blobject:
         # bpy.context.collection.objects.link(obj_final) is also an option if I dont want to return
         # Returns a final object to be rendered in the scene
 
-    def create_colour_map(self, n):
-        # Assigns appropriate colours to each face of an object based on forces
-        # For each vertex in each face evaluate average nearby forces (depth = n)
+    def create_colour_map(self, n, mode):
+        """Assigns appropriate colours to each face of an object based on forces
+        For each vertex in each face evaluate average or max nearby forces (depth = n)
+
+        :param n: Integer: Depth to search for force information
+        :param mode: String: Mode of force evaluation, "Max" or "Avg"
+        :return: UNSURE< < <
+        """
+        #
         # Possibly change n to represent distance, depending on object
         face_edge_map = {ek: self.edges[i] for i, ek in enumerate(self.edge_keys)} #
         # Need to restructure edges vertices and faces to allow for easier searching
