@@ -102,60 +102,58 @@ class VectorTup:
 
 # Object populated with edges
 class ForceObject:
-    def __init__(self, obj, edges):  # Blender Obj, Str, [ForceVertex]
+    def __init__(self, obj, verts, edges):
+        """
+        :param obj: Blender Object
+        :param verts: List[VectorTup]
+        :param edges: List[List[Int]] : Inner list of len 2
+        """
         self.obj = obj  # Bound blender object
-        self.edges = edges  # array of VertPair objects making up force object
-
-    def __add__(self, other):  # Adds to list of edges of object
-        temp = ForceObject(self.obj, self.name, self.edges)
-        temp.edges.extend(other.edges)
-        return temp
+        self.verts = verts
+        self.edges = edges
+        print(f"Force Object Initialised: {len(self.verts)} Verts, {len(self.edges)} Edges")
 
     def __repr__(self):
-        return f"ForceObject: ({len(self.edges)} Edges)"
+        return f"ForceObject: ({len(self.edges)} Edges) ({len(self.verts)} Verts)"
 
     def __str__(self):
         temp = ""
         i = 0
         for edge in self.edges:
             temp += f"{i} : "
-            temp += edge.__str__()
+            temp += [edge[0], edge[1]].__str__()
             temp += "\n"
             i += 1
         return temp
 
     def __len__(self):
-        return len(self.edges)
+        return len(self.verts)
 
     def apply_random_forces(self, frange):  # Tuple [2] specifying min and max values
-        for edge in self.edges:
+        for vert in self.verts:
             temp_vec = make_random_vector(frange)
-            temp_loc = random.random()  # Will never generate 1 but will not matter because it will be close
-            edge.apply_force(temp_vec, temp_loc)
-
-    def extract_verts(self):
-        temp_verts = []
-        for edge in self.edges:
-            if edge.one not in temp_verts:
-                temp_verts.append(edge.one)
-            if edge.two not in temp_verts:
-                temp_verts.append(edge.two)
-        return temp_verts
+            vert += temp_vec
 
     # Creates n links from each vertex in object 1 to vertices in object two
-    def mesh_link(self, other, link_type="CLOSEST", num_links=2):
-        extracted = self.extract_verts()
-        other_extracted = other.extract_verts()
+    def mesh_link(self, other, link_type="CLOSEST", num_links=2):  # DEBUG THIS AND MESH_LINK_CHAIN
+        """
+        :param other: ForceObject
+        :param link_type: String: Defines how links are chosen
+        :param num_links: Int: Defines how many links are created from each vertex
+        :return: None
+        """
+        extracted = self.verts
+        other_extracted = other.verts
         new_edges = []
         num_links = int(num_links)
         if num_links < 1:
             num_links = 1
         temp_dist = 0
         if link_type == "CLOSEST":
-            for vert in extracted:
+            for i, vert in enumerate(extracted):
                 min_dist = [9999] * num_links
                 temp_closest = [None] * num_links
-                for vert2 in other_extracted:
+                for j, vert2 in enumerate(other_extracted):
                     temp_dist = vert.get_euclidean_distance(
                         vert2)  # Gets euclidean distance between initial and second vert
                     min_dist, flag = min_add(min_dist, temp_dist)
@@ -171,10 +169,16 @@ class ForceObject:
             self.edges.extend(other.edges)
 
     # Creates n links from each vertex of every object to vertices in other objects in the list
-    def mesh_link_chain(self, others, link_type="CLOSEST", num_links=2):
-        extracted = [self.extract_verts()]
+    def mesh_link_chain(self, others, link_type="CLOSEST", num_links=2):  # DEBUG THIS AND MESH_LINK
+        """
+        :param others: List[ForceObject]
+        :param link_type: String: Defines how links are chosen
+        :param num_links: Int: Defines how many links are created from each vertex
+        :return: None
+        """
+        extracted = [self.verts]
         for item in others:
-            extracted.append(item.extract_verts())
+            extracted.append(item.verts)
         new_edges = []
         num_links = int(num_links)
         if num_links < 1:
@@ -203,8 +207,12 @@ class ForceObject:
 
     # Creates a finite element model from a mesh
     def to_finite(self, mat):
+        """
+        :param mat: Material Object: Self defined material object, not blender material
+        :return: FEModel3D Object
+        """
         final_finite = FEModel3D()
-        extracted = self.extract_verts()
+        extracted = self.verts
         E, G, Iy, Iz, J, A = mat.as_list()
         for node in extracted:
             final_finite.add_node(str(node), node.loc[0], node.loc[1], node.loc[2])
@@ -300,6 +308,22 @@ class ForceVertex:
     def __str__(self):
         return f"(loc:{self.loc}, dir:{self.dir})"
 
+    def __add__(self, other):
+        if isinstance(other, VectorTup):
+            return ForceVertex(self.loc, self.dir + other)
+        elif isinstance(other, ForceVertex):
+            return ForceVertex(self.loc, self.dir + other.dir)
+        else:
+            raise TypeError(f"Invalid ForceVertex addition: ForceVertex, {type(other)}")
+
+    def __sub__(self, other):
+        if isinstance(other, VectorTup):
+            return ForceVertex(self.loc, self.dir - other)
+        elif isinstance(other, ForceVertex):
+            return ForceVertex(self.loc, self.dir - other.dir)
+        else:
+            raise TypeError(f"Invalid ForceVertex addition: ForceVertex, {type(other)}")
+
     def apply_force(self, force):
         self.dir = self.dir + force
 
@@ -335,14 +359,22 @@ class VertPair:
             return self.two
         raise Exception("Invalid Key: VertPair")
 
-    # loc is a value between 0 and 1 specifying where along the edge the force is applied, 0 being vert 1 and 1 being vert 2
     def apply_force(self, force, loc):
+        """
+        :param force: VectorTup
+        :param loc: Float (Vale between 0 and 1 specifying where force is applied)
+        :return: None
+        """
         self.one.apply_force(force * loc)
         self.two.apply_force(force * (1 - loc))
 
 
 # Creates a force object simply using raw vertex and edge data
 def force_obj_from_raw(obj):  # Obj is object identifier
+    """
+    :param obj: Blender object or String [Object Name]
+    :return: ForceObject(Object Reference: Blender Object, Vertices: List[ForceVertex], Edges: List[Vert1, Vert2])
+    """
     if isinstance(obj, str):
         temp_obj = bpy.data.objects[obj]
     else:
@@ -358,12 +390,16 @@ def force_obj_from_raw(obj):  # Obj is object identifier
 
     for j in range(edge_num):
         edge_verts = temp_dat.edges[j].vertices
-        global_edges.append(VertPair(global_verts[edge_verts[0]], global_verts[edge_verts[1]]))
+        global_edges.append([edge_verts[0], edge_verts[1]])
 
-    return ForceObject(temp_obj, global_edges)
+    return ForceObject(temp_obj, global_verts, global_edges)
 
 
 def make_random_vector(frange):
+    """
+    :param frange: List[Int]
+    :return: VectorTup
+    """
     return VectorTup(random.uniform(frange[0], frange[1]), random.uniform(frange[0], frange[1]),
                      random.uniform(frange[0], frange[1]))
 
@@ -390,12 +426,16 @@ print(len(fobjects[0]))
 
 # fobjects[0].mesh_link(fobjects[1])
 fobjects[0].mesh_link_chain(fobjects[1:])
-print(fobjects[0])
+#print(fobjects[0])
 
 
 # https://vividfax.github.io/2021/01/14/blender-materials.html
 # Creates and returns a new empty blender material with [name: material_name]
 def create_new_material(material_name):
+    """
+    :param material_name: String
+    :return: Blender Material Object: Empty
+    """
     mat = bpy.data.materials.get(material_name)
     if mat is None:  # If material does not yet exist, creates it
         mat = bpy.data.materials.new(name = material_name)
@@ -409,11 +449,16 @@ def create_new_material(material_name):
 # https://vividfax.github.io/2021/01/14/blender-materials.html
 # Creates and returns a blender material with [name: material_name, emission colour: rgb: (r,g,b,1)]
 def create_new_shader(material_name, rgb):
+    """
+    :param material_name: String
+    :param rgb: Tuple[float] (Len 3): Colour of material
+    :return: Blender Material Object: Coloured, Type=Emission
+    """
     mat = create_new_material(material_name)
     nodes = mat.node_tree.nodes
     links = mat.node_tree.links
-    output = nodes.new(type = "ShaderNodeOutputMaterial")
-    shader = nodes.new(type = "ShaderNodeEmission")
+    output = nodes.new(type="ShaderNodeOutputMaterial")
+    shader = nodes.new(type="ShaderNodeEmission")
     nodes["Emission"].inputs[0].default_value = rgb
     nodes["Emission"].inputs[1].default_value = 1
     links.new(shader.outputs[0], output.inputs[0])  # Links output of emission shader to input of the material output
@@ -455,6 +500,4 @@ class Blobject:
         # Faces consist of n vertex indices
         for face in self.faces:
             for vert_num in face:
-
-        pass
-
+                pass
