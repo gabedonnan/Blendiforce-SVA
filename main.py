@@ -163,7 +163,7 @@ class ForceObject:
                         temp_closest_nums = [j + shift] + temp_closest_nums[:-1]
                 if None not in temp_closest_nums:
                     for vtc in temp_closest_nums:
-                        new_edges.append(VertPair(i, vtc))
+                        new_edges.append([i, vtc])
                 else:
                     print("ERROR")
             print(new_edges)
@@ -179,33 +179,35 @@ class ForceObject:
         :return: None
         """
         extracted = [self.verts]
+        shifts = [0]
         for item in others:
             extracted.append(item.verts)
+            shifts.append(len(extracted[-1]))
         new_edges = []
         num_links = int(num_links)
         if num_links < 1:
             num_links = 1
-        temp_dist = 0
         if link_type == "CLOSEST":
             for i, mesh in enumerate(extracted):  # Extracted formatted as such[[], [], [], []]
                 for vert in mesh:
                     min_dist = [9999] * num_links
                     temp_closest = [None] * num_links
+                    temp_closest_num = [None] * num_links
                     for j in (n for n in range(len(extracted)) if n != i):  # All indices of list other than i
-                        for vert2 in extracted[j]:  # Iterates through all vertices from non-active objects
+                        for k, vert2 in enumerate(extracted[j]):  # Iterates through all vertices from non-active objects
                             temp_dist = vert.get_euclidean_distance(
                                 vert2)  # Gets euclidean distance between initial and second vert
                             min_dist, flag = min_add(min_dist, temp_dist)
                             if flag:
                                 temp_closest = [vert2] + temp_closest[:-1]  # add to beginning and pop last
+                                temp_closest_num = [k + shifts[j]] + temp_closest_num[:-1]
                     for vtc in temp_closest:
-                        if VertPair(vtc,
-                                    vert) not in new_edges:  # Checks if the link has already been created in the other direction
-                            new_edges.append(VertPair(vert, vtc))
+                        if [vtc, vert] not in new_edges:  # Checks if the link has already been created in the other direction
+                            new_edges.append([vert, vtc])
 
             self.edges.extend(new_edges)
-            for other in others:
-                self.edges.extend(other.edges)
+            for i, other in enumerate(others):
+                self.edges.extend([[new_edge[0] + shifts[i], new_edge[1] + shifts[i]] for new_edge in other.edges])
 
     # Creates a finite element model from a mesh
     def to_finite(self, mat):
@@ -232,6 +234,16 @@ class ForceObject:
 
 class Material:
     def __init__(self, name, E, G, Iy, Iz, J, A):
+        """These parameters are all specific named properties of a material
+        'Members' refers to the edges from vertex to vertex in the object
+        :param name: String
+        :param E: Float: Modulus of elasticity of material members
+        :param G: Float: Shear modulus of material members
+        :param Iy: Float: Moment of inertia of material's members about their local y-axis
+        :param Iz: Float: Moment of inertia of material's members about their local z-axis
+        :param J: Float: Polar moment of inertia of the material's members
+        :param A: Float: Cross-sectional area of material's members (Internal beam areas)
+        """
         self.name = name
         self.E = E
         self.G = G
@@ -241,14 +253,10 @@ class Material:
         self.A = A
 
     def __repr__(self):
-        return ("Material: " + self.name + " [" + str(self.E) + ", " + str(self.G) +
-                ", " + str(self.Iy) + ", " + str(self.Iz) + ", " +
-                str(self.J) + ", " + str(self.A) + "]")
+        return f"Material: {self.name} [{self.E}, {self.G}, {self.Iy}, {self.Iz}, {self.J}, {self.A}]"
 
     def __str__(self):
-        return (self.name + " [E:" + str(self.E) + ", G:" + str(self.G) +
-                ", Iy:" + str(self.Iy) + ", Iz:" + str(self.Iz) + ", J:" +
-                str(self.J) + ", A:" + str(self.A) + "]")
+        return f"{self.name} [E: {self.E}, G: {self.G}, Iy: {self.Iy}, Iz: {self.Iz}, J: {self.J}, A: {self.A}]"
 
     def __getitem__(self, key):
         if key == 0 or key == "E":
@@ -292,9 +300,6 @@ class ForceVertex:
         self.loc = loc  # (x, y, z) tuple
         self.dir = direction  # VectorTup object
 
-    def get_magnitude(self):
-        return self.dir.get_magnitude()
-
     def __repr__(self):
         return f"ForceVertex: (loc:{self.loc}, dir:{self.dir})"
 
@@ -316,6 +321,9 @@ class ForceVertex:
             return ForceVertex(self.loc, self.dir - other.dir)
         else:
             raise TypeError(f"Invalid ForceVertex addition: ForceVertex, {type(other)}")
+
+    def get_magnitude(self):
+        return self.dir.get_magnitude()
 
     def apply_force(self, force):
         self.dir = self.dir + force
