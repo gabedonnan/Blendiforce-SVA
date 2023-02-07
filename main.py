@@ -34,7 +34,7 @@ class VectorTup:
     def __rmul__(self, other):
         return VectorTup(self.x * other, self.y * other, self.z * other)
 
-    def __div__(self, other):
+    def __truediv__(self, other):
         return VectorTup(self.x / other, self.y / other, self.z / other)
 
     def __add__(self, other):
@@ -50,8 +50,7 @@ class VectorTup:
         return f"({self.x}, {self.y}, {self.z})"
 
     def __bool__(self):
-        return False if (not (
-                    self.x or self.y or self.z)) else True  ##If all numbers are 0 or invalid return false (via demorgans laws)
+        return not (self.x or self.y or self.z)  # If all numbers are 0 or invalid return false (via de morgan's laws)
 
     def __neg__(self):
         return VectorTup(-self.x, -self.y, -self.z)
@@ -68,7 +67,7 @@ class VectorTup:
     def __ge__(self, other):
         return self.get_magnitude() >= other.get_magnitude()
 
-    def __ne__(self, other):  ##Tests for inequality of entire vector, not magnitude inequality
+    def __ne__(self, other):  # Tests for inequality of entire vector, not magnitude inequality
         return not (self.x == other.x and self.y == other.y and self.z == other.z)
 
     def __eq__(self, other):
@@ -144,6 +143,7 @@ class ForceObject:
         """
         extracted = self.verts
         other_extracted = other.verts
+        shift = len(extracted)
         new_edges = []
         num_links = int(num_links)
         if num_links < 1:
@@ -153,20 +153,22 @@ class ForceObject:
             for i, vert in enumerate(extracted):
                 min_dist = [9999] * num_links
                 temp_closest = [None] * num_links
+                temp_closest_nums = [None] * num_links
                 for j, vert2 in enumerate(other_extracted):
                     temp_dist = vert.get_euclidean_distance(
                         vert2)  # Gets euclidean distance between initial and second vert
                     min_dist, flag = min_add(min_dist, temp_dist)
                     if flag:
                         temp_closest = [vert2] + temp_closest[:-1]  # add to beginning and pop last
-                if None not in temp_closest:
-                    for vtc in temp_closest:
-                        new_edges.append(VertPair(vert, vtc))
+                        temp_closest_nums = [j + shift] + temp_closest_nums[:-1]
+                if None not in temp_closest_nums:
+                    for vtc in temp_closest_nums:
+                        new_edges.append(VertPair(i, vtc))
                 else:
                     print("ERROR")
-            # print(other.edges)
+            print(new_edges)
             self.edges.extend(new_edges)
-            self.edges.extend(other.edges)
+            self.edges.extend([[edge_new[0] + shift, edge_new[1] + shift] for edge_new in other.edges])
 
     # Creates n links from each vertex of every object to vertices in other objects in the list
     def mesh_link_chain(self, others, link_type="CLOSEST", num_links=2):  # DEBUG THIS AND MESH_LINK
@@ -228,15 +230,6 @@ class ForceObject:
         return final_finite
 
 
-# Utility function adding a value to a queue style iterable, maintaining sorting from smallest to largest
-def min_add(iterable, val):
-    for i, item in enumerate(iterable):
-        if val < item:
-            iterable = iterable[:i] + [val] + iterable[i:(len(iterable) - 1)]
-            return iterable, True
-    return iterable, False
-
-
 class Material:
     def __init__(self, name, E, G, Iy, Iz, J, A):
         self.name = name
@@ -249,12 +242,12 @@ class Material:
 
     def __repr__(self):
         return ("Material: " + self.name + " [" + str(self.E) + ", " + str(self.G) +
-                ", " + str(self.Iy), + ", " + str(self.Iz) + ", " +
+                ", " + str(self.Iy) + ", " + str(self.Iz) + ", " +
                 str(self.J) + ", " + str(self.A) + "]")
 
     def __str__(self):
         return (self.name + " [E:" + str(self.E) + ", G:" + str(self.G) +
-                ", Iy:" + str(self.Iy), + ", Iz:" + str(self.Iz) + ", J:" +
+                ", Iy:" + str(self.Iy) + ", Iz:" + str(self.Iz) + ", J:" +
                 str(self.J) + ", A:" + str(self.A) + "]")
 
     def __getitem__(self, key):
@@ -369,30 +362,58 @@ class VertPair:
         self.two.apply_force(force * (1 - loc))
 
 
-# Creates a force object simply using raw vertex and edge data
-def force_obj_from_raw(obj):  # Obj is object identifier
-    """
-    :param obj: Blender object or String [Object Name]
-    :return: ForceObject(Object Reference: Blender Object, Vertices: List[ForceVertex], Edges: List[Vert1, Vert2])
-    """
-    if isinstance(obj, str):
-        temp_obj = bpy.data.objects[obj]
-    else:
-        temp_obj = obj
-    temp_dat = temp_obj.data
-    vert_num = len(temp_dat.vertices)
-    edge_num = len(temp_dat.edges)
-    global_verts = []  # Array of ForceVertex objects translated to global coordinates from local
-    global_edges = []
-    for i in range(vert_num):
-        temp_glob = temp_obj.matrix_world @ temp_dat.vertices[i].co  # Translation to global coords
-        global_verts.append(ForceVertex(VectorTup(temp_glob[0], temp_glob[1], temp_glob[2]), VectorTup(0, 0, 0)))
+# Representation of a blender object to be rendered in the scene
+class BlendObject:
+    def __init__(self, name, verts, edges, edge_keys,  faces):
+        self.name = name
+        self.verts = verts
+        self.edges = edges  # Make sure these are of form bpy.context.object.data.edges
+        self.edge_keys = edge_keys  # Make sure these are of form bpy.context.object.data.edge_keys
+        self.faces = faces  # Faces should only be visible faces
+        self.materials = []
+        for i in range(0, 255, 15):
+            self.materials.append(create_new_shader(str(i), (i, 0, 255 - i, 1)))
 
-    for j in range(edge_num):
-        edge_verts = temp_dat.edges[j].vertices
-        global_edges.append([edge_verts[0], edge_verts[1]])
+    # Upon calling the object like x() where x is of type BlendObject, runs this function
+    def __call__(self):
+        obj_mesh = bpy.data.meshes.new(self.name + "Mesh")
+        obj_final = bpy.data.objects.new(self.name, obj_mesh)
+        # Verts, edges and faces MUST be corrected
+        # Good to remove all useless internal vertices + edges resulting from them
+        obj_mesh.from_pydata(self.verts, self.edges, self.faces)
+        obj_final.show_name = True
+        obj_mesh.update()
 
-    return ForceObject(temp_obj, global_verts, global_edges)
+        return obj_final  # Returns the final object
+        # bpy.context.collection.objects.link(obj_final) is also an option if I dont want to return
+        # Returns a final object to be rendered in the scene
+
+    def create_colour_map(self, n, mode):
+        """Assigns appropriate colours to each face of an object based on forces
+        For each vertex in each face evaluate average or max nearby forces (depth = n)
+        :param n: Integer: Depth to search for force information
+        :param mode: String: Mode of force evaluation, "Max" or "Avg"
+        :return: UNSURE< < <
+        """
+        # Possibly change n to represent distance, depending on object
+        # Need to restructure edges vertices and faces to allow for easier searching
+        # Faces consist of n vertex indices
+        for face in self.faces:
+            for vert_num in face:
+                pass
+
+
+# Utility function adding a value to a queue style iterable, maintaining sorting from smallest to largest
+def min_add(iterable, val):
+    for i, item in enumerate(iterable):
+        if val < item:
+            iterable = iterable[:i] + [val] + iterable[i:(len(iterable) - 1)]
+            return iterable, True
+    return iterable, False
+
+
+def get_selected(object_instance):
+    return [x.select for x in object_instance.data.polygons]
 
 
 def make_random_vector(frange):
@@ -402,31 +423,6 @@ def make_random_vector(frange):
     """
     return VectorTup(random.uniform(frange[0], frange[1]), random.uniform(frange[0], frange[1]),
                      random.uniform(frange[0], frange[1]))
-
-
-# Convenient constants
-CTX = bpy.context
-DAT = bpy.data
-OPS = bpy.ops
-
-
-obj = CTX.active_object
-
-
-def getSelected(object_instance):
-    return [x.select for x in object_instance.data.polygons]
-
-
-fobjects = []
-for ob in bpy.data.objects:
-    print(ob.name)
-    fobjects.append(force_obj_from_raw(ob))
-    fobjects[-1].apply_random_forces((-4, 7))
-print(len(fobjects[0]))
-
-# fobjects[0].mesh_link(fobjects[1])
-fobjects[0].mesh_link_chain(fobjects[1:])
-#print(fobjects[0])
 
 
 # https://vividfax.github.io/2021/01/14/blender-materials.html
@@ -465,45 +461,46 @@ def create_new_shader(material_name, rgb):
     return mat
 
 
-# Representation of a blender object to be rendered in the scene
-class Blobject:
-    def __init__(self, name, verts, edges, edge_keys,  faces):
-        self.name = name
-        self.verts = verts
-        self.edges = edges # Make sure these are of form bpy.context.object.data.edges
-        self.edge_keys = edge_keys # Make sure these are of form bpy.context.object.data.edge_keys
-        self.faces = faces  # Faces should only be visible faces
-        self.materials = []
-        for i in range(0, 255, 15):
-            self.materials.append(create_new_shader(str(i), (i, 0, 255 - i, 1)))
+# Creates a force object simply using raw vertex and edge data
+def force_obj_from_raw(obj):  # Obj is object identifier
+    """
+    :param obj: Blender object or String [Object Name]
+    :return: ForceObject(Object Reference: Blender Object, Vertices: List[ForceVertex], Edges: List[Vert1, Vert2])
+    """
+    if isinstance(obj, str):
+        temp_obj = bpy.data.objects[obj]
+    else:
+        temp_obj = obj
+    temp_dat = temp_obj.data
+    vert_num = len(temp_dat.vertices)
+    edge_num = len(temp_dat.edges)
+    global_verts = []  # Array of ForceVertex objects translated to global coordinates from local
+    global_edges = []
+    for i in range(vert_num):
+        temp_glob = temp_obj.matrix_world @ temp_dat.vertices[i].co  # Translation to global coords
+        global_verts.append(ForceVertex(VectorTup(temp_glob[0], temp_glob[1], temp_glob[2]), VectorTup(0, 0, 0)))
 
-    # Upon calling the object like x() where x is of type Blobject, runs this function
-    def __call__(self):
-        obj_mesh = bpy.data.meshes.new(self.name + "Mesh")
-        obj_final = bpy.data.objects.new(self.name, obj_mesh)
-        # Verts, edges and faces MUST be corrected
-        # Good to remove all useless internal vertices + edges resulting from them
-        obj_mesh.from_pydata(self.verts, self.edges, self.faces)
-        obj_final.show_name = True
-        obj_mesh.update()
+    for j in range(edge_num):
+        edge_verts = temp_dat.edges[j].vertices
+        global_edges.append([edge_verts[0], edge_verts[1]])
 
-        return obj_final  # Returns the final object
-        # bpy.context.collection.objects.link(obj_final) is also an option if I dont want to return
-        # Returns a final object to be rendered in the scene
+    return ForceObject(temp_obj, global_verts, global_edges)
 
-    def create_colour_map(self, n, mode):
-        """Assigns appropriate colours to each face of an object based on forces
-        For each vertex in each face evaluate average or max nearby forces (depth = n)
 
-        :param n: Integer: Depth to search for force information
-        :param mode: String: Mode of force evaluation, "Max" or "Avg"
-        :return: UNSURE< < <
-        """
-        #
-        # Possibly change n to represent distance, depending on object
-        face_edge_map = {ek: self.edges[i] for i, ek in enumerate(self.edge_keys)} #
-        # Need to restructure edges vertices and faces to allow for easier searching
-        # Faces consist of n vertex indices
-        for face in self.faces:
-            for vert_num in face:
-                pass
+if __name__ == "__main__":
+    # Convenient constants
+    CTX = bpy.context
+    DAT = bpy.data
+    OPS = bpy.ops
+
+    obj = CTX.active_object
+
+    force_objects = []
+    for ob in bpy.data.objects:
+        print(ob.name)
+        force_objects.append(force_obj_from_raw(ob))
+        force_objects[-1].apply_random_forces((-4, 7))
+    print(len(force_objects[0]))
+
+    force_objects[0].mesh_link_chain(force_objects[1:])
+    print(force_objects[0])
