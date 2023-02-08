@@ -171,7 +171,7 @@ class Material:
 
 # Object populated with edges
 class ForceObject:
-    def __init__(self, obj: object, verts: list[VectorType], edges: list[list[int]]) -> None:
+    def __init__(self, obj: object, verts: list[VectorType], edges: list[list[int]], faces: list[list[int]]) -> None:
         """
         :param obj: Blender Object
         :param verts: List[VectorTup]
@@ -180,10 +180,11 @@ class ForceObject:
         self.obj = obj  # Bound blender object
         self.verts = verts
         self.edges = edges
-        print(f"Force Object Initialised: {len(self.verts)} Verts, {len(self.edges)} Edges")
+        self.faces = faces
+        print(f"Force Object Initialised: {len(self.verts)} Verts, {len(self.edges)} Edges, {len(self.faces)} Faces")
 
     def __repr__(self) -> str:
-        return f"ForceObject: ({len(self.edges)} Edges) ({len(self.verts)} Verts)"
+        return f"ForceObject: ({len(self.verts)} Verts) ({len(self.edges)} Edges) ({len(self.faces)} Faces)"
 
     def __str__(self) -> str:
         temp = ""
@@ -204,8 +205,8 @@ class ForceObject:
             vert += temp_vec
 
     # Creates n links from each vertex in object 1 to vertices in object two
-    def mesh_link(self, other: ForceObjType, num_links: int = 2) -> None:  # DEBUG THIS AND MESH_LINK_CHAIN
-        """
+    def mesh_link(self, other: ForceObjType, num_links: int = 2) -> None:
+        """ Does not interact with object faces
         :param other: ForceObject
         :param num_links: Int: Defines how many links are created from each vertex
         :return: None
@@ -240,6 +241,7 @@ class ForceObject:
 
     def mesh_link_chain(self, others: list[ForceObjType], num_links: int = 2) -> None:
         """Creates n links from each vertex of every object to vertices in other objects in the list
+        Does not interact with object faces
         :param others: List[ForceObject]
         :param num_links: Int : Defines how many links are created from each vertex
         :return: None
@@ -334,12 +336,13 @@ class ForceVertex:
 
 # Representation of a blender object to be rendered in the scene
 class BlendObject:
-    def __init__(self, name: str, verts: list[ForceVertType], edges: list[int], faces: list[int]) -> None:
+    def __init__(self, name: str, verts: list[ForceVertType], edges: list[int], faces: list[int], is_mesh: bool) -> None:
         self.name = name
         self.verts = verts
         self.edges = edges  # Make sure these are of form bpy.context.object.data.edges
         self.faces = faces  # Faces should only be visible faces
         self.materials = []
+        self.is_mesh = is_mesh  # defines whether an object is a mesh only (i.e. no faces will be displayed)
         for i in range(0, 255, 15):
             self.materials.append(create_new_shader(str(i), (i, 0, 255 - i, 1)))
 
@@ -443,8 +446,10 @@ def force_obj_from_raw(obj: str | object) -> ForceObjType:  # Obj is object iden
     temp_dat = temp_obj.data
     vert_num = len(temp_dat.vertices)
     edge_num = len(temp_dat.edges)
+    face_num = len(temp_dat.polygons)
     global_verts = []  # Array of ForceVertex objects translated to global coordinates from local
     global_edges = []
+    global_faces = []
     for i in range(vert_num):
         temp_glob = temp_obj.matrix_world @ temp_dat.vertices[i].co  # Translation to global coords
         global_verts.append(ForceVertex(VectorTup(temp_glob[0], temp_glob[1], temp_glob[2]), VectorTup(0, 0, 0)))
@@ -453,7 +458,11 @@ def force_obj_from_raw(obj: str | object) -> ForceObjType:  # Obj is object iden
         edge_verts = temp_dat.edges[j].vertices
         global_edges.append([edge_verts[0], edge_verts[1]])
 
-    return ForceObject(temp_obj, global_verts, global_edges)
+    for k in range(face_num):
+        face_verts = temp_dat.polygons[k].vertices
+        global_faces.append(face_verts)
+
+    return ForceObject(temp_obj, global_verts, global_edges, global_faces)
 
 
 if __name__ == "__main__":
