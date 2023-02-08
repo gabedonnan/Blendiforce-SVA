@@ -378,6 +378,7 @@ class BlendObject:
             for vert_num in face:
                 pass
 
+    # https://blender.stackexchange.com/questions/5898/how-can-i-create-a-cylinder-linking-two-points-with-python
     def create_cylinder(self, points: list[tuple[float]], cylinder_radius: float) -> None:
         """ Creates a cylinder
         :param points: list[Tuple[float]] : list of length 2 containing a start and end point for the given cylinder
