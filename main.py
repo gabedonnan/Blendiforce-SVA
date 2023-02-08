@@ -78,7 +78,7 @@ class VectorTup:
         return not (self.x == other.x and self.y == other.y and self.z == other.z)
 
     def __eq__(self, other: VectorType) -> bool:
-        return (self.x == other.x and self.y == other.y and self.z == other.z)
+        return self.x == other.x and self.y == other.y and self.z == other.z
 
     def normalise(self) -> None:
         magnitude = math.sqrt(self.x * self.x + self.y * self.y + self.z * self.z)
@@ -102,8 +102,8 @@ class VectorTup:
     def get_magnitude(self) -> float:
         return math.sqrt(self.x * self.x + self.y * self.y + self.z * self.z)
 
-    def as_tup(self) -> tuple[float]:
-        return (self.x, self.y, self.z)
+    def as_tup(self) -> tuple[float, float, float]:
+        return self.x, self.y, self.z
 
 
 class Material:
@@ -171,7 +171,7 @@ class Material:
 
 # Object populated with edges
 class ForceObject:
-    def __init__(self, obj: object, verts: list[VectorType], edges: list[list[int]], faces: list[list[int]]) -> None:
+    def __init__(self, obj: object, verts: list[ForceVertType], edges: list[list[int]], faces: list[list[int]]) -> None:
         """
         :param obj: Blender Object
         :param verts: List[VectorTup]
@@ -199,7 +199,7 @@ class ForceObject:
     def __len__(self) -> int:
         return len(self.verts)
 
-    def apply_random_forces(self, frange: list[float]) -> None:  # Tuple [2] specifying min and max values
+    def apply_random_forces(self, frange: tuple[float]) -> None:  # Tuple [2] specifying min and max values
         for vert in self.verts:
             temp_vec = make_random_vector(frange)
             vert += temp_vec
@@ -298,7 +298,7 @@ class ForceObject:
 
 
 class ForceVertex:
-    def __init__(self, loc: tuple[float], direction: VectorType) -> None:
+    def __init__(self, loc: VectorType, direction: VectorType) -> None:
         self.loc = loc  # (x, y, z) tuple
         self.dir = direction  # VectorTup object
 
@@ -336,7 +336,7 @@ class ForceVertex:
 
 # Representation of a blender object to be rendered in the scene
 class BlendObject:
-    def __init__(self, name: str, verts: list[ForceVertType], edges: list[int], faces: list[int], is_mesh: bool) -> None:
+    def __init__(self, name: str, verts: list[ForceVertType], edges: list[list[int]], faces: list[list[int]], is_mesh: bool) -> None:
         self.name = name
         self.verts = [vert.loc for vert in verts]
         self.edges = edges  # Make sure these are of form bpy.context.object.data.edges
@@ -346,8 +346,11 @@ class BlendObject:
         for i in range(0, 255, 15):
             self.materials.append(create_new_shader(str(i), (i, 0, 255 - i, 1)))
 
-    # Upon calling the object like x() where x is of type BlendObject, runs this function
     def make(self, collection_name: str = "Collection") -> None:
+        """
+        :param collection_name: string defining the name of the collection that is currently active
+        :return: None
+        """
         if not self.is_mesh:
             obj_mesh = bpy.data.meshes.new(self.name + "Mesh")
             obj_final = bpy.data.objects.new(self.name, obj_mesh)
@@ -359,10 +362,6 @@ class BlendObject:
         else:
             for edge in self.edges:
                 self.create_cylinder([self.verts[edge[0]], self.verts[edge[1]]], 0.1)
-
-        #return obj_final  # Returns the final object
-        # bpy.context.collection.objects.link(obj_final) is also an option if I dont want to return
-        # Returns a final object to be rendered in the scene
 
     def create_colour_map(self, n: int, mode: str):
         """Assigns appropriate colours to each face of an object based on forces
@@ -416,7 +415,7 @@ def get_selected(object_instance):
     return [x.select for x in object_instance.data.polygons]
 
 
-def make_random_vector(frange: list[float]) -> VectorType:
+def make_random_vector(frange: tuple[float]) -> VectorType:
     """
     :param frange: List[Float]
     :return: VectorTup
@@ -509,6 +508,5 @@ if __name__ == "__main__":
     print(len(force_objects[0]))
 
     force_objects[0].mesh_link_chain(force_objects[1:])
-    #print(force_objects[0])
     x = BlendObject("ham", force_objects[0].verts, force_objects[0].edges, force_objects[0].faces, False)
     x.make()
