@@ -3,7 +3,7 @@ import bmesh
 import math
 import random
 from collections import deque
-from typing import TypeVar, Type, Iterable, Any
+from typing import TypeVar, Type, Optional, Any, Iterable
 
 VectorType = TypeVar("VectorType", bound="VectorTup")
 MaterialType = TypeVar("MaterialType", bound="Material")
@@ -338,7 +338,7 @@ class ForceVertex:
 class BlendObject:
     def __init__(self, name: str, verts: list[ForceVertType], edges: list[int], faces: list[int], is_mesh: bool) -> None:
         self.name = name
-        self.verts = verts
+        self.verts = [vert.loc for vert in verts]
         self.edges = edges  # Make sure these are of form bpy.context.object.data.edges
         self.faces = faces  # Faces should only be visible faces
         self.materials = []
@@ -347,16 +347,20 @@ class BlendObject:
             self.materials.append(create_new_shader(str(i), (i, 0, 255 - i, 1)))
 
     # Upon calling the object like x() where x is of type BlendObject, runs this function
-    def __call__(self) -> object:
-        obj_mesh = bpy.data.meshes.new(self.name + "Mesh")
-        obj_final = bpy.data.objects.new(self.name, obj_mesh)
-        # Verts, edges and faces MUST be corrected
-        # Good to remove all useless internal vertices + edges resulting from them
-        obj_mesh.from_pydata(self.verts, self.edges, self.faces)
-        obj_final.show_name = True
-        obj_mesh.update()
+    def make(self, collection_name: str = "Collection") -> None:
+        if not self.is_mesh:
+            obj_mesh = bpy.data.meshes.new(self.name + "Mesh")
+            obj_final = bpy.data.objects.new(self.name, obj_mesh)
+            collection = bpy.data.collections[collection_name]
+            collection.objects.link(obj_final)
+            obj_mesh.from_pydata(self.verts, self.edges, self.faces)
+            # obj_final.show_name = True
+            # obj_mesh.update()
+        else:
+            for edge in self.edges:
+                self.create_cylinder([self.verts[edge[0]], self.verts[edge[1]]], 0.1)
 
-        return obj_final  # Returns the final object
+        #return obj_final  # Returns the final object
         # bpy.context.collection.objects.link(obj_final) is also an option if I dont want to return
         # Returns a final object to be rendered in the scene
 
@@ -373,6 +377,29 @@ class BlendObject:
         for face in self.faces:
             for vert_num in face:
                 pass
+
+    def create_cylinder(self, points: list[tuple[float]], cylinder_radius: float) -> None:
+        """ Creates a cylinder
+        :param points: list[Tuple[float]] : list of length 2 containing a start and end point for the given cylinder
+        :param cylinder_radius: float : radius of created cylinder
+        :return: None
+        """
+        x_dist = points[1][0] - points[0][0]
+        y_dist = points[1][1] - points[0][1]
+        z_dist = points[1][2] - points[0][2]
+        distance = math.sqrt(x_dist**2 + y_dist**2 + z_dist**2)
+        bpy.ops.mesh.primitive_cylinder_add(
+            radius=cylinder_radius,
+            depth=distance,
+            location=(x_dist / 2 + points[0][0],
+                      y_dist / 2 + points[0][1],
+                      z_dist / 2 + points[0][2]),
+            vertices=8
+        )
+        phi_rotation = math.atan2(x_dist, y_dist)
+        theta_rotation = math.acos(z_dist / distance)
+        bpy.context.object.rotation_euler[1] = theta_rotation
+        bpy.context.object.rotation_euler[2] = phi_rotation
 
 
 # Utility function adding a value to a queue style iterable, maintaining sorting from smallest to largest
@@ -481,4 +508,6 @@ if __name__ == "__main__":
     print(len(force_objects[0]))
 
     force_objects[0].mesh_link_chain(force_objects[1:])
-    print(force_objects[0])
+    #print(force_objects[0])
+    x = BlendObject("ham", force_objects[0].verts, force_objects[0].edges, force_objects[0].faces, False)
+    x.make()
