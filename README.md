@@ -1,3 +1,5 @@
+# Gabriel Donnan's final year project for Computer Science at The University of Bath
+
 Creating Custom Properties:
 `bpy.types.Object.custom_float_vector_temp = bpy.props.FloatVectorProperty(name = "Force Application Temp")`
 
