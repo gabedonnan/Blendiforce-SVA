@@ -359,12 +359,13 @@ class BlendObject:
     def __init__(self, name: str, verts: list[ForceVertType], edges: list[list[int]], faces: list[list[int]], is_mesh: bool) -> None:
         self.name = name
         self.verts = [vert.loc for vert in verts]
+        self.forces = [vert_force.dir for vert_force in verts]
         self.edges = edges  # Make sure these are of form bpy.context.object.data.edges
         self.faces = faces  # Faces should only be visible faces
         self.materials = []
         self.is_mesh = is_mesh  # defines whether an object is a mesh only (i.e. no faces will be displayed)
-        for i in range(0, 255, 15):
-            self.materials.append(create_new_shader(str(i), (i, 0, 255 - i, 1)))
+        for i in range(0, 5, 1):
+            self.materials.append(create_new_shader(str(i), (i, 0, 5 - i, 1)))
 
     def make(self, collection_name: str = "Collection") -> None:
         """
@@ -397,8 +398,9 @@ class BlendObject:
             for vert_num in face:
                 pass
 
+    # Adapted from:
     # https://blender.stackexchange.com/questions/5898/how-can-i-create-a-cylinder-linking-two-points-with-python
-    def create_cylinder(self, points: list[tuple[float]], cylinder_radius: float) -> None:
+    def create_cylinder(self, points: tuple[tuple[float]], cylinder_radius: float) -> None:
         """ Creates a cylinder
         Y axis has to be entirely flipped due to some earlier error which I will not be addressing yet
         :param points: list[Tuple[float]] : list of length 2 containing a start and end point for the given cylinder
@@ -421,6 +423,7 @@ class BlendObject:
         theta_rotation = math.acos(z_dist / distance)
         bpy.context.object.rotation_euler[0] = theta_rotation
         bpy.context.object.rotation_euler[2] = phi_rotation
+        bpy.context.object.data.materials.append(random.choice(self.materials))
 
 
 
@@ -439,8 +442,8 @@ def get_selected(object_instance):
 
 def make_random_vector(frange: tuple[float,float]) -> VectorType:
     """
-    :param frange: List[Float]
-    :return: VectorTup
+    :param frange: tuple[float, float]
+    :return: VectorTup : VectorTup with randomised values
     """
     return VectorTup(random.uniform(frange[0], frange[1]), random.uniform(frange[0], frange[1]),
                      random.uniform(frange[0], frange[1]))
@@ -477,7 +480,7 @@ def create_new_shader(material_name: str, rgb: tuple[float]) -> object:
     output = nodes.new(type="ShaderNodeOutputMaterial")
     shader = nodes.new(type="ShaderNodeEmission")
     nodes["Emission"].inputs[0].default_value = rgb
-    nodes["Emission"].inputs[1].default_value = 1
+    nodes["Emission"].inputs[1].default_value = 0.2
     links.new(shader.outputs[0], output.inputs[0])  # Links output of emission shader to input of the material output
     return mat
 
