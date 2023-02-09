@@ -11,22 +11,6 @@ ForceObjType = TypeVar("ForceObjType", bound="ForceObject")
 ForceVertType = TypeVar("ForceVertType", bound="ForceVertex")
 BlendObjectType = TypeVar("BlendObjectType", bound="BlendObject")
 
-class ApplyForceDialogueOperator(bpy.types.Operator):
-    bl_idname = "object.apply_force_dialogue"
-    bl_label = "Choose forces to apply"
-
-    name = bpy.props.StringProperty(name="Object Selected:", default="Cube")  # CHANGE DEFAULT LATER
-    force = bpy.props.FloatVectorProperty(name="Force:", default=(1.0, 1.0, 1.0))
-
-    def execute(self, context):
-        ForceObject(bpy.context.active_object, self.force)
-        self.report({'INFO'}, "Made Force Object")
-        return {'FINISHED'}
-
-    def invoke(self, context, event):
-        wm = context.window_manager
-        return wm.invoke_props_dialog(self)
-
 
 # A vector, representable as a tuple
 class VectorTup:
