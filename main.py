@@ -80,6 +80,26 @@ class VectorTup:
     def __eq__(self, other: VectorType) -> bool:
         return self.x == other.x and self.y == other.y and self.z == other.z
 
+    def __getitem__(self, key: int) -> float:
+        if key == 0:
+            return self.x
+        elif key == 1:
+            return self.y
+        elif key == 2:
+            return self.z
+        else:
+            raise IndexError("VectorTup: Index out of bounds")
+
+    def __setitem__(self, key: int, value: float) -> None:
+        if key == 0:
+            self.x = value
+        elif key == 1:
+            self.y = value
+        elif key == 2:
+            self.z = value
+        else:
+            raise IndexError("VectorTup: Index out of bounds")
+
     def normalise(self) -> None:
         magnitude = math.sqrt(self.x * self.x + self.y * self.y + self.z * self.z)
         self.x = self.x / magnitude
@@ -361,14 +381,14 @@ class BlendObject:
             # obj_mesh.update()
         else:
             for edge in self.edges:
-                self.create_cylinder([self.verts[edge[0]], self.verts[edge[1]]], 0.1)
+                self.create_cylinder((self.verts[edge[0]], self.verts[edge[1]]), 0.01)
 
-    def create_colour_map(self, n: int, mode: str):
+    def create_colour_map(self, n: int, mode: str) -> None:
         """Assigns appropriate colours to each face of an object based on forces
         For each vertex in each face evaluate average or max nearby forces (depth = n)
         :param n: Integer: Depth to search for force information
         :param mode: String: Mode of force evaluation, "Max" or "Avg"
-        :return: UNSURE< < <
+        :return: None
         """
         # Possibly change n to represent distance, depending on object
         # Need to restructure edges vertices and faces to allow for easier searching
@@ -380,26 +400,28 @@ class BlendObject:
     # https://blender.stackexchange.com/questions/5898/how-can-i-create-a-cylinder-linking-two-points-with-python
     def create_cylinder(self, points: list[tuple[float]], cylinder_radius: float) -> None:
         """ Creates a cylinder
+        Y axis has to be entirely flipped due to some earlier error which I will not be addressing yet
         :param points: list[Tuple[float]] : list of length 2 containing a start and end point for the given cylinder
         :param cylinder_radius: float : radius of created cylinder
         :return: None
         """
         x_dist = points[1][0] - points[0][0]
-        y_dist = points[1][1] - points[0][1]
+        y_dist = points[0][1] - points[1][1]
         z_dist = points[1][2] - points[0][2]
         distance = math.sqrt(x_dist**2 + y_dist**2 + z_dist**2)
         bpy.ops.mesh.primitive_cylinder_add(
             radius=cylinder_radius,
             depth=distance,
             location=(x_dist / 2 + points[0][0],
-                      y_dist / 2 + points[0][1],
+                      y_dist / 2 + points[1][1],
                       z_dist / 2 + points[0][2]),
             vertices=8
         )
         phi_rotation = math.atan2(x_dist, y_dist)
         theta_rotation = math.acos(z_dist / distance)
-        bpy.context.object.rotation_euler[1] = theta_rotation
+        bpy.context.object.rotation_euler[0] = theta_rotation
         bpy.context.object.rotation_euler[2] = phi_rotation
+
 
 
 # Utility function adding a value to a queue style iterable, maintaining sorting from smallest to largest
@@ -415,7 +437,7 @@ def get_selected(object_instance):
     return [x.select for x in object_instance.data.polygons]
 
 
-def make_random_vector(frange: tuple[float]) -> VectorType:
+def make_random_vector(frange: tuple[float,float]) -> VectorType:
     """
     :param frange: List[Float]
     :return: VectorTup
@@ -508,5 +530,5 @@ if __name__ == "__main__":
     print(len(force_objects[0]))
 
     force_objects[0].mesh_link_chain(force_objects[1:])
-    x = BlendObject("ham", force_objects[0].verts, force_objects[0].edges, force_objects[0].faces, False)
+    x = BlendObject("ham", force_objects[0].verts, force_objects[0].edges, force_objects[0].faces, True)
     x.make()
