@@ -403,7 +403,7 @@ class BlendObject:
             location=(x_dist / 2 + points[0][0],
                       y_dist / 2 + points[1][1],
                       z_dist / 2 + points[0][2]),
-            vertices=8
+            vertices=3
         )
         phi_rotation = math.atan2(x_dist, y_dist)
         
