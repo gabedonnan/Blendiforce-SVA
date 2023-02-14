@@ -395,6 +395,8 @@ class BlendObject:
         y_dist = points[0][1] - points[1][1]
         z_dist = points[1][2] - points[0][2]
         distance = math.sqrt(x_dist**2 + y_dist**2 + z_dist**2)
+        if distance == 0:
+            return
         bpy.ops.mesh.primitive_cylinder_add(
             radius=cylinder_radius,
             depth=distance,
@@ -404,6 +406,7 @@ class BlendObject:
             vertices=8
         )
         phi_rotation = math.atan2(x_dist, y_dist)
+        
         theta_rotation = math.acos(z_dist / distance)
         bpy.context.object.rotation_euler[0] = theta_rotation
         bpy.context.object.rotation_euler[2] = phi_rotation
