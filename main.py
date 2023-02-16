@@ -276,7 +276,7 @@ class ForceObject:
         self.edges.extend(new_edges)
         for i, other in enumerate(others):
             self.verts.extend(other.verts)
-            self.edges.extend([[new_edge[0] + shifts[i+1], new_edge[1] + shifts[i+1]] for new_edge in other.edges])
+            self.edges.extend([[new_edge[0] + shifts[i + 1], new_edge[1] + shifts[i + 1]] for new_edge in other.edges])
 
     # Creates a finite element model from a mesh
     def to_finite(self, mat: MaterialType) -> object:  # Redo return typing
@@ -340,14 +340,13 @@ class ForceVertex:
 
 # Representation of a blender object to be rendered in the scene
 class BlendObject:
-    def __init__(self, name: str, verts: list[ForceVertType], edges: list[list[int]], faces: list[list[int]], is_mesh: bool) -> None:
+    def __init__(self, name: str, verts: list[ForceVertType], edges: list[list[int]], faces: list[list[int]]) -> None:
         self.name = name
         self.verts = [vert.loc for vert in verts]
         self.forces = [vert_force.dir for vert_force in verts]
         self.edges = edges  # Make sure these are of form bpy.context.object.data.edges
         self.faces = faces  # Faces should only be visible faces
         self.materials = []
-        self.is_mesh = is_mesh  # defines whether an object is a mesh only (i.e. no faces will be displayed)
         for i in range(0, 5, 1):
             self.materials.append(create_new_shader(str(i), (i, 0, 5 - i, 1)))
 
@@ -356,31 +355,8 @@ class BlendObject:
         :param collection_name: string defining the name of the collection that is currently active
         :return: None
         """
-        if not self.is_mesh:
-            obj_mesh = bpy.data.meshes.new(self.name + "Mesh")
-            obj_final = bpy.data.objects.new(self.name, obj_mesh)
-            collection = bpy.data.collections[collection_name]
-            collection.objects.link(obj_final)
-            obj_mesh.from_pydata(self.verts, self.edges, self.faces)
-            # obj_final.show_name = True
-            # obj_mesh.update()
-        else:
-            for edge in self.edges:
-                self.create_cylinder((self.verts[edge[0]], self.verts[edge[1]]), 0.01)
-
-    def create_colour_map(self, n: int, mode: str) -> None:
-        """Assigns appropriate colours to each face of an object based on forces
-        For each vertex in each face evaluate average or max nearby forces (depth = n)
-        :param n: Integer: Depth to search for force information
-        :param mode: String: Mode of force evaluation, "Max" or "Avg"
-        :return: None
-        """
-        # Possibly change n to represent distance, depending on object
-        # Need to restructure edges vertices and faces to allow for easier searching
-        # Faces consist of n vertex indices
-        for face in self.faces:
-            for vert_num in face:
-                pass
+        for edge in self.edges:
+            self.create_cylinder((self.verts[edge[0]], self.verts[edge[1]]), 0.01)
 
     # Adapted from:
     # https://blender.stackexchange.com/questions/5898/how-can-i-create-a-cylinder-linking-two-points-with-python
@@ -394,7 +370,7 @@ class BlendObject:
         x_dist = points[1][0] - points[0][0]
         y_dist = points[0][1] - points[1][1]
         z_dist = points[1][2] - points[0][2]
-        distance = math.sqrt(x_dist**2 + y_dist**2 + z_dist**2)
+        distance = math.sqrt(x_dist ** 2 + y_dist ** 2 + z_dist ** 2)
         if distance == 0:
             return
         bpy.ops.mesh.primitive_cylinder_add(
@@ -406,12 +382,11 @@ class BlendObject:
             vertices=3
         )
         phi_rotation = math.atan2(x_dist, y_dist)
-        
+
         theta_rotation = math.acos(z_dist / distance)
         bpy.context.object.rotation_euler[0] = theta_rotation
         bpy.context.object.rotation_euler[2] = phi_rotation
         bpy.context.object.data.materials.append(random.choice(self.materials))
-
 
 
 # Utility function adding a value to a queue style iterable, maintaining sorting from smallest to largest
@@ -427,7 +402,7 @@ def get_selected(object_instance):
     return [x.select for x in object_instance.data.polygons]
 
 
-def make_random_vector(frange: tuple[float,float]) -> VectorType:
+def make_random_vector(frange: tuple[float, float]) -> VectorType:
     """
     :param frange: tuple[float, float]
     :return: VectorTup : VectorTup with randomised values
@@ -445,7 +420,7 @@ def create_new_material(material_name: str) -> object:
     """
     mat = bpy.data.materials.get(material_name)
     if mat is None:  # If material does not yet exist, creates it
-        mat = bpy.data.materials.new(name = material_name)
+        mat = bpy.data.materials.new(name=material_name)
     mat.use_nodes = True  # Uses blender nodes
     if mat.node_tree:
         mat.node_tree.links.clear()
@@ -520,5 +495,6 @@ if __name__ == "__main__":
     print(len(force_objects[0]))
 
     force_objects[0].mesh_link_chain(force_objects[1:])
-    x = BlendObject("ham", force_objects[0].verts, force_objects[0].edges, force_objects[0].faces, True)
+    x = BlendObject("ham", force_objects[0].verts, force_objects[0].edges, force_objects[0].faces)
     x.make()
+    
