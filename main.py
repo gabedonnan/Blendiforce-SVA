@@ -14,7 +14,7 @@ BlendObjectType = TypeVar("BlendObjectType", bound="BlendObject")
 
 # A vector, representable as a tuple
 class VectorTup:
-    def __init__(self, x: float, y: float, z: float) -> None:
+    def __init__(self, x: float = 0, y: float = 0, z: float = 0) -> None:
         self.x = x
         self.y = y
         self.z = z
@@ -300,6 +300,21 @@ class ForceObject:
                                        case="Case " + str(k))
         return final_finite
 
+    def get_moments(self) -> VectorType:
+        """
+        :return: VectorTup : (Moment X, Moment Y, Moment Z)
+        :unit: NewtonMeters (Possibly NewtonInches depending on blender)
+        """
+        COG = self.get_centre_of_gravity()
+        final = VectorTup()
+        return final
+
+    def get_centre_of_gravity(self) -> VectorType:
+        """ Gets the centre of gravity of an object
+        :return: VectorTup : (x,y,z)
+        """
+        pass
+
 
 class ForceVertex:
     def __init__(self, loc: VectorType, direction: VectorType) -> None:
@@ -497,4 +512,3 @@ if __name__ == "__main__":
     force_objects[0].mesh_link_chain(force_objects[1:])
     x = BlendObject("ham", force_objects[0].verts, force_objects[0].edges, force_objects[0].faces)
     x.make()
-    
