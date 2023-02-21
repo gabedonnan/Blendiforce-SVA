@@ -123,24 +123,27 @@ class VectorTup:
 
 
 class Material:
-    def __init__(self, name: str, E: float, G: float, Iy: float, Iz: float, J: float, A: float) -> None:
+    def __init__(self, name: str, E: float, G: float, rad: float = 0.01) -> None:
         """These parameters are all specific named properties of a material
         'Members' refers to the edges from vertex to vertex in the object
         :param name: String
         :param E: Float: Modulus of elasticity of material members
+        :unit: Pascals
         :param G: Float: Shear modulus of material members
-        :param Iy: Float: Moment of inertia of material's members about their local y-axis
-        :param Iz: Float: Moment of inertia of material's members about their local z-axis
-        :param J: Float: Polar moment of inertia of the material's members
-        :param A: Float: Cross-sectional area of material's members (Internal beam areas)
+        :unit: Pascals
+        :param rad: Float: Radius of elements, treated as circles
+        :Iy: Float: Moment of inertia of material's members about their local y-axis
+        :Iz: Float: Moment of inertia of material's members about their local z-axis
+        :J: Float: Polar moment of inertia of the material's members
+        :A: Float: Cross-sectional area of material's members (Internal beam areas)
         """
         self.name = name
         self.E = E
         self.G = G
-        self.Iy = Iy
-        self.Iz = Iz
-        self.J = J
-        self.A = A
+        self.Iy = (math.pi * (rad ** 4)) / 4
+        self.Iz = 2 * self.Iy
+        self.J = (math.pi * ((2 * rad) ** 4)) / 32
+        self.A = math.pi * (rad ** 2)
 
     def __repr__(self) -> str:
         return f"Material: {self.name} [{self.E}, {self.G}, {self.Iy}, {self.Iz}, {self.J}, {self.A}]"
@@ -184,10 +187,41 @@ class Material:
     def as_list(self) -> list[float]:
         return [self.E, self.G, self.Iy, self.Iz, self.J, self.A]
 
+    def recalc_radius(self, rad: float = 0.01) -> None:
+        self.Iy = (math.pi * (rad ** 4)) / 4
+        self.Iz = 2 * self.Iy
+        self.J = (math.pi * ((2 * rad) ** 4)) / 32
+        self.A = math.pi * (rad ** 2)
+
 
 class MaterialEnum(Enum):
-    STEEL = Material("STEEL", 0, 0, 0, 0, 0, 0)
+    """
+    Enum class containing pre-definitions for materials to be used
+    """
+    # Steel material from:
+    # https://www.metalformingmagazine.com/article/?/materials/high-strength-steel/metal-properties-elastic-modulus
+    STEEL = Material("STEEL", 2.1e11, 7.93e10)
 
+    # Birch material from: https://www.matweb.com/search/datasheet_print.aspx?matguid=c499c231f20d4284a4da8bea3d2644fc
+    BIRCH = Material("WOOD_BIRCH", 1.186e10, 8.34e6)
+
+    # Oak material from: https://www.matweb.com/search/DataSheet.aspx?MatGUID=ea505704d8d343f2800de42db7b16de8&ckck=1
+    # Green oak specifically
+    OAK = Material("WOOD_OAK", 7.86e9, 6.41e6)
+
+    # Granite material from: https://www.matweb.com/search/datasheet.aspx?matguid=3d4056a86e79481cb6a80c89caae1d90
+    # and https://www.sciencedirect.com/science/article/pii/S1674775522000993
+    GRANITE = Material("GRANITE", 4e10, 6.1e7)
+
+    # Diamond material from: http://www.chm.bris.ac.uk/motm/diamond/diamprop.htm
+    # and https://arxiv.org/ftp/arxiv/papers/1811/1811.09503.pdf
+    DIAMOND = Material("DIAMOND", 1.22e12, 5.3e11)
+
+    # Plastic material from: https://designerdata.nl/materials/plastics/thermo-plastics/low-density-polyethylene
+    POLYETHYLENE = Material("PLASTIC_POLYETHYLENE", 3e8, 2.25e8)
+
+    # Plastic material from: https://www.matweb.com/search/datasheet_print.aspx?matguid=e19bc7065d1c4836a89d41ff23d47413
+    PVC = Material("PLASTIC_PVC", 1.7e9, 6.35e7)
 
 # Object populated with edges
 class ForceObject:
