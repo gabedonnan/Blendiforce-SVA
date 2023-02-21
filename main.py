@@ -1,5 +1,6 @@
 import bpy
 import bmesh
+from enum import Enum
 import dill
 import math
 import random
@@ -11,7 +12,6 @@ MaterialType = TypeVar("MaterialType", bound="Material")
 ForceObjType = TypeVar("ForceObjType", bound="ForceObject")
 ForceVertType = TypeVar("ForceVertType", bound="ForceVertex")
 BlendObjectType = TypeVar("BlendObjectType", bound="BlendObject")
-
 
 # A vector, representable as a tuple
 class VectorTup:
@@ -183,6 +183,10 @@ class Material:
 
     def as_list(self) -> list[float]:
         return [self.E, self.G, self.Iy, self.Iz, self.J, self.A]
+
+
+class MaterialEnum(Enum):
+    STEEL = Material("STEEL", 0, 0, 0, 0, 0, 0)
 
 
 # Object populated with edges
@@ -550,6 +554,7 @@ def load_obj(file_name: str) -> object:
             final = dill.load(f)
     return final
 
+
 if __name__ == "__main__":
     # Convenient constants
     CTX = bpy.context
@@ -557,14 +562,12 @@ if __name__ == "__main__":
     OPS = bpy.ops
 
     obj = CTX.active_object
-
+    bpy_objects = [obj for obj in bpy.data.objects if obj.type == "MESH"]
     force_objects = []
-    for ob in bpy.data.objects:
+    for ob in bpy_objects:
         print(ob.name)
         force_objects.append(force_obj_from_raw(ob))
-        print(force_objects[-1].get_net_moment())
         force_objects[-1].apply_random_forces((-4, 7))
-        print(force_objects[-1].get_net_moment())
     print(len(force_objects[0]))
 
     force_objects[0].mesh_link_chain(force_objects[1:])
