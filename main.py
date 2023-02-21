@@ -19,11 +19,17 @@ class VectorTup:
         self.y = y
         self.z = z
 
-    def __mul__(self, other: float) -> VectorType:  # Other int / float
-        return VectorTup(self.x * other, self.y * other, self.z * other)
+    def __mul__(self, other: float | VectorType) -> VectorType:  # Other int / float
+        if isinstance(other, float):
+            return VectorTup(self.x * other, self.y * other, self.z * other)
+        else:
+            return VectorTup(self.x * other.x, self.y * other.y, self.z * other.z)
 
-    def __rmul__(self, other: float) -> VectorType:
-        return VectorTup(self.x * other, self.y * other, self.z * other)
+    def __rmul__(self, other: float | VectorType) -> VectorType:
+        if isinstance(other, float):
+            return VectorTup(self.x * other, self.y * other, self.z * other)
+        else:
+            return VectorTup(self.x * other.x, self.y * other.y, self.z * other.z)
 
     def __truediv__(self, other: float) -> VectorType:
         return VectorTup(self.x / other, self.y / other, self.z / other)
@@ -96,6 +102,11 @@ class VectorTup:
         y_temp = self.y / magnitude
         z_temp = self.z / magnitude
         return VectorTup(x_temp, y_temp, z_temp)
+
+    def cross(self, other: VectorType) -> VectorType:
+        return VectorTup(self.y * other.z - self.z * other.y,
+                         self.z * other.x - self.x * other.z,
+                         self.x * other.y - self.y * other.x)
 
     def set_magnitude(self, magnitude: int) -> None:
         ini_magnitude = math.sqrt(self.x * self.x + self.y * self.y + self.z * self.z)
@@ -175,16 +186,21 @@ class Material:
 
 # Object populated with edges
 class ForceObject:
-    def __init__(self, obj: object, verts: list[ForceVertType], edges: list[list[int]], faces: list[list[int]]) -> None:
+    def __init__(self, obj: object, verts: list[ForceVertType],
+                 edges: list[list[int]], faces: list[list[int]],
+                 mass: float) -> None:
         """
         :param obj: Blender Object
         :param verts: List[VectorTup]
         :param edges: List[List[Int]] : Inner list of len 2
+        :param faces: List[List[Int]] : Inner list of len n (faces of any shape)
+        :param mass: float : kilograms
         """
         self.obj = obj  # Bound blender object
         self.verts = verts
         self.edges = edges
         self.faces = faces
+        self.mass = mass
         print(f"Force Object Initialised: {len(self.verts)} Verts, {len(self.edges)} Edges, {len(self.faces)} Faces")
 
     def __repr__(self) -> str:
@@ -206,7 +222,7 @@ class ForceObject:
     def apply_random_forces(self, frange: tuple[float]) -> None:  # Tuple [2] specifying min and max values
         for vert in self.verts:
             temp_vec = make_random_vector(frange)
-            vert += temp_vec
+            vert.dir += temp_vec
 
     # Creates n links from each vertex in object 1 to vertices in object two
     def mesh_link(self, other: ForceObjType, num_links: int = 2) -> None:
@@ -252,9 +268,9 @@ class ForceObject:
         """
         MAX_DIST = 99999  # Constant
         extracted = [self.verts]
-        shifts = [0]
+        shifts = [0, len(extracted[0])]
         new_edges = []
-        for item in others:
+        for item in others:  # Iterate through other objects
             extracted.append(item.verts)
             shifts.append(len(extracted[-1]) + shifts[-1])
         for mesh_num, active_mesh in enumerate(extracted):
@@ -280,7 +296,7 @@ class ForceObject:
 
     # Creates a finite element model from a mesh
     def to_finite(self, mat: MaterialType) -> object:  # Redo return typing
-        """
+        """ Works only for single material objects
         :param mat: Material Object: Self defined material object, not blender material
         :return: FEModel3D Object
         """
@@ -300,26 +316,35 @@ class ForceObject:
                                        case="Case " + str(k))
         return final_finite
 
-    def get_moments(self) -> VectorType:
+    def get_net_moment(self) -> VectorType:
         """
         :return: VectorTup : (Moment X, Moment Y, Moment Z)
         :unit: NewtonMeters (Possibly NewtonInches depending on blender)
         """
-        COG = self.get_centre_of_gravity()
+        COG: VectorType = self.get_centre_of_gravity()
         final = VectorTup()
+        for vert in self.verts:
+            dist = COG - vert.loc
+            final += dist.cross(vert.dir)
         return final
 
     def get_centre_of_gravity(self) -> VectorType:
-        """ Gets the centre of gravity of an object
+        """ Gets the centre of gravity of an object,
+        assumes uniform mass distribution,
+        requires mass input and uses vertex locations as mass points
         :return: VectorTup : (x,y,z)
         """
-        pass
+        final = VectorTup()
+        for vert in self.verts:
+            final += vert.loc
+        final /= len(self.verts)
+        return final
 
 
 class ForceVertex:
     def __init__(self, loc: VectorType, direction: VectorType) -> None:
-        self.loc = loc  # (x, y, z) tuple
-        self.dir = direction  # VectorTup object
+        self.loc: VectorType = loc
+        self.dir: VectorType = direction
 
     def __repr__(self) -> str:
         return f"ForceVertex: (loc:{self.loc}, dir:{self.dir})"
@@ -472,6 +497,7 @@ def force_obj_from_raw(obj: str | object) -> ForceObjType:  # Obj is object iden
         temp_obj = bpy.data.objects[obj]
     else:
         temp_obj = obj
+    obj_mass = obj["MASS"]  # Accesses object's custom property "MASS"
     temp_dat = temp_obj.data
     vert_num = len(temp_dat.vertices)
     edge_num = len(temp_dat.edges)
@@ -491,7 +517,7 @@ def force_obj_from_raw(obj: str | object) -> ForceObjType:  # Obj is object iden
         face_verts = temp_dat.polygons[k].vertices
         global_faces.append(face_verts)
 
-    return ForceObject(temp_obj, global_verts, global_edges, global_faces)
+    return ForceObject(temp_obj, global_verts, global_edges, global_faces, obj_mass)
 
 
 if __name__ == "__main__":
@@ -506,7 +532,9 @@ if __name__ == "__main__":
     for ob in bpy.data.objects:
         print(ob.name)
         force_objects.append(force_obj_from_raw(ob))
+        print(force_objects[-1].get_net_moment())
         force_objects[-1].apply_random_forces((-4, 7))
+        print(force_objects[-1].get_net_moment())
     print(len(force_objects[0]))
 
     force_objects[0].mesh_link_chain(force_objects[1:])
