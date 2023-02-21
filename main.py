@@ -1,5 +1,6 @@
 import bpy
 import bmesh
+import dill
 import math
 import random
 from collections import deque
@@ -519,6 +520,35 @@ def force_obj_from_raw(obj: str | object) -> ForceObjType:  # Obj is object iden
 
     return ForceObject(temp_obj, global_verts, global_edges, global_faces, obj_mass)
 
+
+def save_obj(obj: object, file_name: str) -> None:
+    """
+    Uses dill library to save an object to a file name with .pkl suffix
+    :param obj: Any object
+    :param file_name: String filename
+    :return: None
+    """
+    if ".pkl" not in file_name:
+        with open(file_name + ".pkl", "wb") as f:
+            dill.dump(obj, f)
+    else:
+        with open(file_name, "wb") as f:
+            dill.dump(obj, f)
+
+
+def load_obj(file_name: str) -> object:
+    """
+    Uses dill library to load an object from a file with .pkl suffix
+    :param file_name: String filename
+    :return: Unpickled object
+    """
+    if ".pkl" not in file_name:
+        with open(file_name + ".pkl", "rb") as f:
+            final = dill.load(f)
+    else:
+        with open(file_name, "rb") as f:
+            final = dill.load(f)
+    return final
 
 if __name__ == "__main__":
     # Convenient constants
