@@ -13,6 +13,7 @@ ForceObjType = TypeVar("ForceObjType", bound="ForceObject")
 ForceVertType = TypeVar("ForceVertType", bound="ForceVertex")
 BlendObjectType = TypeVar("BlendObjectType", bound="BlendObject")
 
+
 # A vector, representable as a tuple
 class VectorTup:
     def __init__(self, x: float = 0, y: float = 0, z: float = 0) -> None:
@@ -90,6 +91,12 @@ class VectorTup:
             self.z = value
         else:
             raise IndexError("VectorTup: Index out of bounds")
+
+    def __getstate__(self) -> dict:
+        return {"x": self.x, "y": self.y, "z": self.z}
+
+    def __setstate__(self, state: dict) -> None:
+        self.x, self.y, self.z = state["x"], state["y"], state["z"]
 
     def normalise(self) -> None:
         magnitude = math.sqrt(self.x * self.x + self.y * self.y + self.z * self.z)
@@ -184,6 +191,19 @@ class Material:
     def __len__(self) -> int:
         return 6
 
+    def __getstate__(self) -> dict:
+        return {"E": self.E, "G": self.G,
+                "Iy": self.Iy, "Iz": self.Iz,
+                "J": self.J, "A": self.A}
+
+    def __setstate__(self, state: dict) -> None:
+        self.E = state["E"]
+        self.G = state["G"]
+        self.Iy = state["Iy"]
+        self.Iz = state["Iz"]
+        self.J = state["J"]
+        self.A = state["A"]
+
     def as_list(self) -> list[float]:
         return [self.E, self.G, self.Iy, self.Iz, self.J, self.A]
 
@@ -223,27 +243,23 @@ class MaterialEnum(Enum):
     # Plastic material from: https://www.matweb.com/search/datasheet_print.aspx?matguid=e19bc7065d1c4836a89d41ff23d47413
     PVC = Material("PLASTIC_PVC", 1.7e9, 6.35e7)
 
+
 # Object populated with edges
 class ForceObject:
-    def __init__(self, obj: object, verts: list[ForceVertType],
-                 edges: list[list[int]], faces: list[list[int]],
-                 mass: float) -> None:
+    def __init__(self, verts: list[ForceVertType],
+                 edges: list[list[int]], mass: float) -> None:
         """
-        :param obj: Blender Object
         :param verts: List[VectorTup]
         :param edges: List[List[Int]] : Inner list of len 2
-        :param faces: List[List[Int]] : Inner list of len n (faces of any shape)
         :param mass: float : kilograms
         """
-        self.obj = obj  # Bound blender object
         self.verts = verts
         self.edges = edges
-        self.faces = faces
         self.mass = mass
-        print(f"Force Object Initialised: {len(self.verts)} Verts, {len(self.edges)} Edges, {len(self.faces)} Faces")
+        print(f"Force Object Initialised: {len(self.verts)} Verts, {len(self.edges)} Edges")
 
     def __repr__(self) -> str:
-        return f"ForceObject: ({len(self.verts)} Verts) ({len(self.edges)} Edges) ({len(self.faces)} Faces)"
+        return f"ForceObject: ({len(self.verts)} Verts) ({len(self.edges)} Edges)"
 
     def __str__(self) -> str:
         temp = ""
@@ -258,10 +274,33 @@ class ForceObject:
     def __len__(self) -> int:
         return len(self.verts)
 
+    def __getstate__(self) -> dict:
+        return {"verts":[v.__getstate__() for v in self.verts],
+                "edges": self.edges,
+                "mass": self.mass}
+
+    def __setstate__(self, state: dict) -> None:
+        self.verts = [VectorTup(v["x"], v["y"], v["z"]) for v in state["verts"]]
+        self.edges = state["edges"]
+        self.edges = state["mass"]
+
     def apply_random_forces(self, frange: tuple[float]) -> None:  # Tuple [2] specifying min and max values
         for vert in self.verts:
             temp_vec = make_random_vector(frange)
             vert.dir += temp_vec
+
+    def apply_gravity(self) -> None:
+        """
+        Applies gravitational force to object vertex-wise based on the formula F = GMm/r2
+        :return: None
+        """
+        GRAV_CONSTANT = 6.67e-11  # Newton's gravitational constant, with unit Nm2kg-2
+        EARTH_MASS = 5.972e24  # Mass of the earth
+        EARTH_RAD = 6371  # Average radius of the earth in km
+        ELEMENT_MASS = self.mass / len(self.verts)  # Gets mass of each vertex
+        gravitational_force = VectorTup(0, 0, - (GRAV_CONSTANT * EARTH_MASS * ELEMENT_MASS) / (EARTH_RAD ** 2))
+        for vert in self.verts:
+            vert.dir += gravitational_force
 
     # Creates n links from each vertex in object 1 to vertices in object two
     def mesh_link(self, other: ForceObjType, num_links: int = 2) -> None:
@@ -407,6 +446,14 @@ class ForceVertex:
         else:
             raise TypeError(f"Invalid ForceVertex addition: ForceVertex, {type(other)}")
 
+    def __getstate__(self) -> dict:
+        return {"loc": self.loc.__getstate__(),
+                "dir": self.dir.__getstate__()}
+
+    def __setstate__(self, state) -> None:
+        self.loc = VectorTup(state["loc"]["x"], state["loc"]["y"], state["loc"]["z"])
+        self.dir = VectorTup(state["dir"]["x"], state["dir"]["y"], state["dir"]["z"])
+
     def get_magnitude(self) -> float:
         return self.dir.get_magnitude()
 
@@ -419,12 +466,26 @@ class ForceVertex:
 
 # Representation of a blender object to be rendered in the scene
 class BlendObject:
-    def __init__(self, name: str, verts: list[ForceVertType], edges: list[list[int]], faces: list[list[int]]) -> None:
+    def __init__(self, name: str, verts: list[ForceVertType], edges: list[list[int]]) -> None:
         self.name = name
         self.verts = [vert.loc for vert in verts]
         self.forces = [vert_force.dir for vert_force in verts]
         self.edges = edges  # Make sure these are of form bpy.context.object.data.edges
-        self.faces = faces  # Faces should only be visible faces
+        self.materials = []
+        for i in range(0, 5, 1):
+            self.materials.append(create_new_shader(str(i), (i, 0, 5 - i, 1)))
+
+    def __getstate__(self) -> dict:
+        return {"name": self.name,
+                "verts": [v.__getstate__() for v in self.verts],
+                "forces": [f.__getstate__() for f in self.forces],
+                "edges": self.edges}
+
+    def __setstate__(self, state: dict) -> None:
+        self.name = state["name"]
+        self.verts = [VectorTup(v["x"], v["y"], v["z"]) for v in state["verts"]]
+        self.forces = [VectorTup(f["x"], f["y"], f["z"]) for f in state["forces"]]
+        self.edges = state["edges"]
         self.materials = []
         for i in range(0, 5, 1):
             self.materials.append(create_new_shader(str(i), (i, 0, 5 - i, 1)))
@@ -434,6 +495,7 @@ class BlendObject:
         :param collection_name: string defining the name of the collection that is currently active
         :return: None
         """
+        print(self.__dict__)
         for edge in self.edges:
             self.create_cylinder((self.verts[edge[0]], self.verts[edge[1]]), 0.01)
 
@@ -530,7 +592,7 @@ def create_new_shader(material_name: str, rgb: tuple[float]) -> object:
 def force_obj_from_raw(obj: str | object) -> ForceObjType:  # Obj is object identifier
     """
     :param obj: Blender object or String [Object Name]
-    :return: ForceObject(Object Reference: Blender Object, Vertices: List[ForceVertex], Edges: List[Vert1, Vert2])
+    :return: ForceObject(Vertices: List[ForceVertex], Edges: List[Vert1, Vert2], Mass: float)
     """
     if isinstance(obj, str):
         temp_obj = bpy.data.objects[obj]
@@ -540,10 +602,8 @@ def force_obj_from_raw(obj: str | object) -> ForceObjType:  # Obj is object iden
     temp_dat = temp_obj.data
     vert_num = len(temp_dat.vertices)
     edge_num = len(temp_dat.edges)
-    face_num = len(temp_dat.polygons)
     global_verts = []  # Array of ForceVertex objects translated to global coordinates from local
     global_edges = []
-    global_faces = []
     for i in range(vert_num):
         temp_glob = temp_obj.matrix_world @ temp_dat.vertices[i].co  # Translation to global coords
         global_verts.append(ForceVertex(VectorTup(temp_glob[0], temp_glob[1], temp_glob[2]), VectorTup(0, 0, 0)))
@@ -552,11 +612,7 @@ def force_obj_from_raw(obj: str | object) -> ForceObjType:  # Obj is object iden
         edge_verts = temp_dat.edges[j].vertices
         global_edges.append([edge_verts[0], edge_verts[1]])
 
-    for k in range(face_num):
-        face_verts = temp_dat.polygons[k].vertices
-        global_faces.append(face_verts)
-
-    return ForceObject(temp_obj, global_verts, global_edges, global_faces, obj_mass)
+    return ForceObject(global_verts, global_edges, obj_mass)
 
 
 def save_obj(obj: object, file_name: str) -> None:
@@ -567,7 +623,7 @@ def save_obj(obj: object, file_name: str) -> None:
     :return: None
     """
     if ".pkl" not in file_name:
-        with open(file_name + ".pkl", "wb") as f:
+        with open(f"{file_name}.pkl", "wb") as f:
             dill.dump(obj, f)
     else:
         with open(file_name, "wb") as f:
@@ -581,7 +637,7 @@ def load_obj(file_name: str) -> object:
     :return: Unpickled object
     """
     if ".pkl" not in file_name:
-        with open(file_name + ".pkl", "rb") as f:
+        with open(f"{file_name}.pkl", "rb") as f:
             final = dill.load(f)
     else:
         with open(file_name, "rb") as f:
@@ -595,15 +651,22 @@ if __name__ == "__main__":
     DAT = bpy.data
     OPS = bpy.ops
 
+    SAVE_BASEPATH = "C:\\Users\\gmandonnan\\Desktop\\"
+
     obj = CTX.active_object
     bpy_objects = [obj for obj in bpy.data.objects if obj.type == "MESH"]
     force_objects = []
     for ob in bpy_objects:
         print(ob.name)
+        ob["MASS"] = 1  # For testing
         force_objects.append(force_obj_from_raw(ob))
-        force_objects[-1].apply_random_forces((-4, 7))
+        force_objects[-1].apply_gravity()
     print(len(force_objects[0]))
 
     force_objects[0].mesh_link_chain(force_objects[1:])
-    x = BlendObject("ham", force_objects[0].verts, force_objects[0].edges, force_objects[0].faces)
-    x.make()
+    x = BlendObject("ham", force_objects[0].verts, force_objects[0].edges)
+
+    # Object save + load testing
+    save_obj(x, SAVE_BASEPATH + "temp_blobject.pkl")
+    y = load_obj(SAVE_BASEPATH + "temp_blobject")
+    y.make()
