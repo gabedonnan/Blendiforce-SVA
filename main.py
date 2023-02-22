@@ -5,6 +5,7 @@ import dill
 import math
 import random
 from collections import deque
+import numpy as np
 from typing import TypeVar, Type, Optional, Any, Iterable
 
 VectorType = TypeVar("VectorType", bound="VectorTup")
@@ -487,17 +488,35 @@ class BlendObject:
         self.forces = [VectorTup(f["x"], f["y"], f["z"]) for f in state["forces"]]
         self.edges = state["edges"]
         self.materials = []
-        for i in range(0, 5, 1):
+        for i in range(0, 5, 1):  # Re-defines class materials from scratch as these cannot natively be pickled
             self.materials.append(create_new_shader(str(i), (i, 0, 5 - i, 1)))
 
-    def make(self, collection_name: str = "Collection") -> None:
+    def make(self, fast: bool = False) -> None:
         """
-        :param collection_name: string defining the name of the collection that is currently active
+        :param fast: boolean : Determines whether the fast rendering method is used
+            Fast Rendering: Renders 0 dimensional mesh of edges and vertices
+            Slow Rendering: Renders coloured edges based on the forces applied
         :return: None
         """
-        print(self.__dict__)
-        for edge in self.edges:
-            self.create_cylinder((self.verts[edge[0]], self.verts[edge[1]]), 0.01)
+        if fast:  # https://blender.stackexchange.com/questions/100913/render-large-3d-graphs-millions-of-vertices-edges
+            bpy.ops.mesh.primitive_cube_add()  # Creates a primitive cube so context object is at (0, 0, 0)
+            context_dat = bpy.context.object.data
+            bm = bmesh.new()
+            vert_map = {}
+            # Adds each vertex to a bmesh, transposes data to more efficient
+            for i, pos in enumerate(self.verts):
+                pos = np.array(pos.as_tup())
+                vert = bm.verts.new(pos)
+                vert_map[i] = vert
+
+            for edge in self.edges:
+                bm.edges.new((vert_map[edge[0]], vert_map[edge[1]]))
+
+            bm.to_mesh(context_dat)
+            bm.free()
+        else:
+            for edge in self.edges:
+                self.create_cylinder((self.verts[edge[0]], self.verts[edge[1]]), 0.01)
 
     # Adapted from:
     # https://blender.stackexchange.com/questions/5898/how-can-i-create-a-cylinder-linking-two-points-with-python
@@ -651,7 +670,7 @@ if __name__ == "__main__":
     DAT = bpy.data
     OPS = bpy.ops
 
-    SAVE_BASEPATH = "C:\\Users\\gmandonnan\\Desktop\\"
+    SAVE_BASEPATH = "C:\\Users\\Gabriel\\Downloads\\"
 
     obj = CTX.active_object
     bpy_objects = [obj for obj in bpy.data.objects if obj.type == "MESH"]
@@ -669,4 +688,4 @@ if __name__ == "__main__":
     # Object save + load testing
     save_obj(x, SAVE_BASEPATH + "temp_blobject.pkl")
     y = load_obj(SAVE_BASEPATH + "temp_blobject")
-    y.make()
+    y.make(fast=True)
