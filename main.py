@@ -1,14 +1,45 @@
-import bpy
-import bmesh
 from enum import Enum
-import dill
 import math
 import random
 from collections import deque
 import numpy as np
-from typing import TypeVar, Type, Optional, Any, Iterable
-from PyNite.Visualization import Renderer
-from PyNite.FEModel3D import FEModel3D
+from typing import TypeVar, Any
+
+try:
+    import bpy
+    import bmesh
+except ModuleNotFoundError:
+    raise Exception("BPY or BMESH not found: This program must be run in Blender in order to work")
+
+try:
+    import dill
+    USE_DILL = True
+    USE_PICKLE = False
+except ModuleNotFoundError:
+    try:
+        import pickle
+        USE_PICKLE = True
+        USE_DILL = False
+        print("WARNING: Module 'dill' not found. Using 'pickle' instead.")
+    except ModuleNotFoundError:
+        USE_PICKLE = False
+        USE_DILL = False
+        print("WARNING: Modules 'dill' and 'pickle' not found. Saving capability will be disabled.")
+
+try:
+    import asyncio
+    USE_ASYNC = True
+except ModuleNotFoundError:
+    USE_ASYNC = False
+    print("WARNING: Module 'asyncio' not found. Async capability will be disabled.")
+
+try:
+    from PyNite.Visualization import Renderer
+    from PyNite.FEModel3D import FEModel3D
+    USE_PYNITE = True
+except ModuleNotFoundError:
+    USE_PYNITE = False
+    print("WARNING: Module 'PyNite' not found. Model analysis capability will be disabled.")
 
 VectorType = TypeVar("VectorType", bound="VectorTup")
 MaterialType = TypeVar("MaterialType", bound="Material")
@@ -278,7 +309,7 @@ class ForceObject:
         return len(self.verts)
 
     def __getstate__(self) -> dict:
-        return {"verts":[v.__getstate__() for v in self.verts],
+        return {"verts": [v.__getstate__() for v in self.verts],
                 "edges": self.edges,
                 "mass": self.mass}
 
@@ -559,10 +590,8 @@ def min_add(iterable, val: float) -> tuple[Any, bool]:
             return iterable, True
     return iterable, False
 
-
 def get_selected(object_instance):
     return [x.select for x in object_instance.data.polygons]
-
 
 def make_random_vector(frange: tuple[float, float]) -> VectorType:
     """
@@ -571,7 +600,6 @@ def make_random_vector(frange: tuple[float, float]) -> VectorType:
     """
     return VectorTup(random.uniform(frange[0], frange[1]), random.uniform(frange[0], frange[1]),
                      random.uniform(frange[0], frange[1]))
-
 
 # https://vividfax.github.io/2021/01/14/blender-materials.html
 # Creates and returns a new empty blender material with [name: material_name]
@@ -588,7 +616,6 @@ def create_new_material(material_name: str) -> object:
         mat.node_tree.links.clear()
         mat.node_tree.nodes.clear()
     return mat
-
 
 # https://vividfax.github.io/2021/01/14/blender-materials.html
 # Creates and returns a blender material with [name: material_name, emission colour: rgb: (r,g,b,1)]
@@ -608,10 +635,9 @@ def create_new_shader(material_name: str, rgb: tuple[float]) -> object:
     links.new(shader.outputs[0], output.inputs[0])  # Links output of emission shader to input of the material output
     return mat
 
-
 # Creates a force object simply using raw vertex and edge data
-def force_obj_from_raw(obj: str | object) -> ForceObjType:  # Obj is object identifier
-    """
+def force_obj_from_raw(obj: str | object, default_mass: float = 1) -> ForceObjType:  # Obj is object identifier
+    """ Creates a ForceObject from raw blender object data
     :param obj: Blender object or String [Object Name]
     :return: ForceObject(Vertices: List[ForceVertex], Edges: List[Vert1, Vert2], Mass: float)
     """
@@ -619,7 +645,11 @@ def force_obj_from_raw(obj: str | object) -> ForceObjType:  # Obj is object iden
         temp_obj = bpy.data.objects[obj]
     else:
         temp_obj = obj
+
+    ob["MASS"] = default_mass  # For testing
+
     obj_mass = obj["MASS"]  # Accesses object's custom property "MASS"
+
     temp_dat = temp_obj.data
     vert_num = len(temp_dat.vertices)
     edge_num = len(temp_dat.edges)
@@ -633,8 +663,42 @@ def force_obj_from_raw(obj: str | object) -> ForceObjType:  # Obj is object iden
         edge_verts = temp_dat.edges[j].vertices
         global_edges.append([edge_verts[0], edge_verts[1]])
 
-    return ForceObject(global_verts, global_edges, obj_mass)
+    final = ForceObject(global_verts, global_edges, obj_mass)
+    final.apply_gravity()
+    return final
 
+# Creates a force object simply using raw vertex and edge data
+async def force_obj_from_raw_async(obj: str | object, default_mass: float = 1) -> ForceObjType:  # Obj is object identifier
+    """ Creates a ForceObject from raw blender object data asynchronously
+    Has the potential to work faster with further asynchronous
+    :param obj: Blender object or String [Object Name]
+    :return: ForceObject(Vertices: List[ForceVertex], Edges: List[Vert1, Vert2], Mass: float)
+    """
+    if isinstance(obj, str):
+        temp_obj = bpy.data.objects[obj]
+    else:
+        temp_obj = obj
+
+    ob["MASS"] = default_mass  # For testing
+
+    obj_mass = obj["MASS"]  # Accesses object's custom property "MASS"
+
+    temp_dat = temp_obj.data
+    vert_num = len(temp_dat.vertices)
+    edge_num = len(temp_dat.edges)
+    global_verts = []  # Array of ForceVertex objects translated to global coordinates from local
+    global_edges = []
+    for i in range(vert_num):
+        temp_glob = temp_obj.matrix_world @ temp_dat.vertices[i].co  # Translation to global coords
+        global_verts.append(ForceVertex(VectorTup(temp_glob[0], temp_glob[1], temp_glob[2]), VectorTup(0, 0, 0)))
+
+    for j in range(edge_num):
+        edge_verts = temp_dat.edges[j].vertices
+        global_edges.append([edge_verts[0], edge_verts[1]])
+
+    final = ForceObject(global_verts, global_edges, obj_mass)
+    final.apply_gravity()
+    return final
 
 def save_obj(obj: object, file_name: str) -> None:
     """
@@ -650,6 +714,20 @@ def save_obj(obj: object, file_name: str) -> None:
         with open(file_name, "wb") as f:
             dill.dump(obj, f)
 
+def save_obj_pickle(obj: object, file_name: str) -> None:
+    """
+        Uses pickle library to save an object to a file name with .pkl suffix
+        Used as an alternative to the dill saving structure
+        :param obj: Any object
+        :param file_name: String filename
+        :return: None
+        """
+    if ".pkl" not in file_name:
+        with open(f"{file_name}.pkl", "wb") as f:
+            pickle.dump(obj, f)
+    else:
+        with open(file_name, "wb") as f:
+            pickle.dump(obj, f)
 
 def load_obj(file_name: str) -> object:
     """
@@ -665,18 +743,42 @@ def load_obj(file_name: str) -> object:
             final = dill.load(f)
     return final
 
+def load_obj_pickle(file_name: str) -> object:
+    """
+    Uses pickle library to load an object from a file with .pkl suffix
+    Used as an alternative to the dill saving structure
+    :param file_name: String filename
+    :return: Unpickled object
+    """
+    if ".pkl" not in file_name:
+        with open(f"{file_name}.pkl", "rb") as f:
+            final = pickle.load(f)
+    else:
+        with open(file_name, "rb") as f:
+            final = pickle.load(f)
+    return final
 
-def render_finite(model: FEModel3D) -> None:
+def render_finite(model: FEModel3D, deform: bool = False) -> None:
+    """ Analyzes a FEModel3D then renders them to a custom output
+    :param model: FEModel3D : Generated and correctly loaded finite element model
+    :param deform: Boolean : Determines whether force based deformation will be displayed upon render
+    :return: None
+    """
     force_finite.analyze(log=True, check_statics=True)
     finite_renderer = Renderer(model)
     finite_renderer.annotation_size = 0.2
-    finite_renderer.deformed_shape = False
+    if deform:
+        finite_renderer.deformed_shape = True
+        finite_renderer.deform_scale = 200
+    else:
+        finite_renderer.deformed_shape = False
     finite_renderer.color_map = "Mx"
-    finite_renderer.combo_name = "1.4F"
+    finite_renderer.combo_name = "Combo 1"
     finite_renderer.labels = True
     finite_renderer.scalar_bar = True
     finite_renderer.scalar_bar_text_size = 15
-    finite_renderer.render_model
+    finite_renderer.render_model()
+
 
 if __name__ == "__main__":
     # Convenient constants
@@ -684,29 +786,32 @@ if __name__ == "__main__":
     DAT = bpy.data
     OPS = bpy.ops
 
-    SAVE_BASEPATH = "C:\\Users\\Gabriel\\Downloads\\"
-
     obj = CTX.active_object
     bpy_objects = [obj for obj in bpy.data.objects if obj.type == "MESH"]
-    force_objects = []
-    for ob in bpy_objects:
-        print(ob.name)
-        ob["MASS"] = 1  # For testing
-        force_objects.append(force_obj_from_raw(ob))
-        force_objects[-1].apply_gravity()
+    if USE_ASYNC:
+        force_objects = []
+        for ob in bpy_objects:
+            print(ob.name)
+            force_objects.append(force_obj_from_raw(ob))
+
+    else:  # FIX THIS UP
+        force_objects = [force_obj_from_raw_async(ob) for ob in bpy_objects]
     print(len(force_objects[0]))
 
     force_objects[0].mesh_link_chain(force_objects[1:])
-    
-    force_finite = force_objects[0].to_finite(MaterialEnum.STEEL.value)
-    
-    render_finite(force_finite)
-    
-    
+
+    if USE_PYNITE:
+        force_finite = force_objects[0].to_finite(MaterialEnum.STEEL.value)
+        render_finite(force_finite)
+
     x = BlendObject("ham", force_objects[0].verts, force_objects[0].edges)
 
     # Object save + load testing
-    
-    #save_obj(x, SAVE_BASEPATH + "temp_blobject.pkl")
-    #y = load_obj(SAVE_BASEPATH + "temp_blobject")
+
+    if USE_DILL:
+        save_obj(x, SAVE_BASEPATH + "temp_blobject.pkl")
+        y = load_obj(SAVE_BASEPATH + "temp_blobject")
+    elif USE_PICKLE:
+        save_obj_pickle(x, SAVE_BASEPATH + "temp_blobject.pkl")
+        y = load_obj_pickle(SAVE_BASEPATH + "temp_blobject")
     x.make(fast=True)
