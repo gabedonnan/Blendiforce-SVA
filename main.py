@@ -7,6 +7,8 @@ import random
 from collections import deque
 import numpy as np
 from typing import TypeVar, Type, Optional, Any, Iterable
+from PyNite.Visualization import Renderer
+from PyNite.FEModel3D import FEModel3D
 
 VectorType = TypeVar("VectorType", bound="VectorTup")
 MaterialType = TypeVar("MaterialType", bound="Material")
@@ -385,14 +387,14 @@ class ForceObject:
         for node in extracted:
             final_finite.add_node(str(node), node.loc[0], node.loc[1], node.loc[2])
         for j, edge in enumerate(self.edges):
-            final_finite.add_member("C" + str(j), str(edge[0]), str(edge[1]), E, G, Iy, Iz, J, A)
+            final_finite.add_member("C" + str(j), str(extracted[edge[0]]), str(extracted[edge[1]]), E, G, Iy, Iz, J, A)
         for k, fnode in enumerate(extracted):
             final_finite.add_node_load(str(fnode), Direction='FX', P=fnode.dir.x,
-                                       case="Case " + str(k))
+                                       case="Case 1")
             final_finite.add_node_load(str(fnode), Direction='FY', P=fnode.dir.y,
-                                       case="Case " + str(k))
+                                       case="Case 1")
             final_finite.add_node_load(str(fnode), Direction='FZ', P=fnode.dir.z,
-                                       case="Case " + str(k))
+                                       case="Case 1")
         return final_finite
 
     def get_net_moment(self) -> VectorType:
@@ -664,6 +666,18 @@ def load_obj(file_name: str) -> object:
     return final
 
 
+def render_finite(model: FEModel3D) -> None:
+    force_finite.analyze(log=True, check_statics=True)
+    finite_renderer = Renderer(model)
+    finite_renderer.annotation_size = 0.2
+    finite_renderer.deformed_shape = False
+    finite_renderer.color_map = "Mx"
+    finite_renderer.combo_name = "1.4F"
+    finite_renderer.labels = True
+    finite_renderer.scalar_bar = True
+    finite_renderer.scalar_bar_text_size = 15
+    finite_renderer.render_model
+
 if __name__ == "__main__":
     # Convenient constants
     CTX = bpy.context
@@ -683,9 +697,16 @@ if __name__ == "__main__":
     print(len(force_objects[0]))
 
     force_objects[0].mesh_link_chain(force_objects[1:])
+    
+    force_finite = force_objects[0].to_finite(MaterialEnum.STEEL.value)
+    
+    render_finite(force_finite)
+    
+    
     x = BlendObject("ham", force_objects[0].verts, force_objects[0].edges)
 
     # Object save + load testing
-    save_obj(x, SAVE_BASEPATH + "temp_blobject.pkl")
-    y = load_obj(SAVE_BASEPATH + "temp_blobject")
-    y.make(fast=True)
+    
+    #save_obj(x, SAVE_BASEPATH + "temp_blobject.pkl")
+    #y = load_obj(SAVE_BASEPATH + "temp_blobject")
+    x.make(fast=True)
