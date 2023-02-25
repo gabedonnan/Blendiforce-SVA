@@ -590,8 +590,10 @@ def min_add(iterable, val: float) -> tuple[Any, bool]:
             return iterable, True
     return iterable, False
 
+
 def get_selected(object_instance):
     return [x.select for x in object_instance.data.polygons]
+
 
 def make_random_vector(frange: tuple[float, float]) -> VectorType:
     """
@@ -600,6 +602,7 @@ def make_random_vector(frange: tuple[float, float]) -> VectorType:
     """
     return VectorTup(random.uniform(frange[0], frange[1]), random.uniform(frange[0], frange[1]),
                      random.uniform(frange[0], frange[1]))
+
 
 # https://vividfax.github.io/2021/01/14/blender-materials.html
 # Creates and returns a new empty blender material with [name: material_name]
@@ -616,6 +619,7 @@ def create_new_material(material_name: str) -> object:
         mat.node_tree.links.clear()
         mat.node_tree.nodes.clear()
     return mat
+
 
 # https://vividfax.github.io/2021/01/14/blender-materials.html
 # Creates and returns a blender material with [name: material_name, emission colour: rgb: (r,g,b,1)]
@@ -634,6 +638,7 @@ def create_new_shader(material_name: str, rgb: tuple[float]) -> object:
     nodes["Emission"].inputs[1].default_value = 0.2
     links.new(shader.outputs[0], output.inputs[0])  # Links output of emission shader to input of the material output
     return mat
+
 
 # Creates a force object simply using raw vertex and edge data
 def force_obj_from_raw(obj: str | object, default_mass: float = 1) -> ForceObjType:  # Obj is object identifier
@@ -666,6 +671,7 @@ def force_obj_from_raw(obj: str | object, default_mass: float = 1) -> ForceObjTy
     final = ForceObject(global_verts, global_edges, obj_mass)
     final.apply_gravity()
     return final
+
 
 # Creates a force object simply using raw vertex and edge data
 async def force_obj_from_raw_async(obj: str | object, default_mass: float = 1) -> ForceObjType:  # Obj is object identifier
@@ -700,6 +706,7 @@ async def force_obj_from_raw_async(obj: str | object, default_mass: float = 1) -
     final.apply_gravity()
     return final
 
+
 def save_obj(obj: object, file_name: str) -> None:
     """
     Uses dill library to save an object to a file name with .pkl suffix
@@ -714,20 +721,22 @@ def save_obj(obj: object, file_name: str) -> None:
         with open(file_name, "wb") as f:
             dill.dump(obj, f)
 
+
 def save_obj_pickle(obj: object, file_name: str) -> None:
     """
-        Uses pickle library to save an object to a file name with .pkl suffix
-        Used as an alternative to the dill saving structure
-        :param obj: Any object
-        :param file_name: String filename
-        :return: None
-        """
+    Uses pickle library to save an object to a file name with .pkl suffix
+    Used as an alternative to the dill saving structure
+    :param obj: Any object
+    :param file_name: String filename
+    :return: None
+    """
     if ".pkl" not in file_name:
         with open(f"{file_name}.pkl", "wb") as f:
             pickle.dump(obj, f)
     else:
         with open(file_name, "wb") as f:
             pickle.dump(obj, f)
+
 
 def load_obj(file_name: str) -> object:
     """
@@ -743,6 +752,7 @@ def load_obj(file_name: str) -> object:
             final = dill.load(f)
     return final
 
+
 def load_obj_pickle(file_name: str) -> object:
     """
     Uses pickle library to load an object from a file with .pkl suffix
@@ -757,6 +767,7 @@ def load_obj_pickle(file_name: str) -> object:
         with open(file_name, "rb") as f:
             final = pickle.load(f)
     return final
+
 
 def render_finite(model: FEModel3D, deform: bool = False) -> None:
     """ Analyzes a FEModel3D then renders them to a custom output
