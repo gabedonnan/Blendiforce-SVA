@@ -1,5 +1,3 @@
-import time
-
 from enum import Enum
 import math
 import random
@@ -331,8 +329,8 @@ class ForceObject:
         :return: None
         """
         GRAV_CONSTANT = 6.67e-11  # Newton's gravitational constant, with unit Nm2kg-2
-        EARTH_MASS = 5.972e24  # Mass of the earth
-        EARTH_RAD = 6371  # Average radius of the earth in km
+        EARTH_MASS = 5.972e24  # Mass of the earth in kg
+        EARTH_RAD = 6.371e6  # Average radius of the earth in m
         ELEMENT_MASS = self.mass / len(self.verts)  # Gets mass of each vertex
         gravitational_force = VectorTup(0, 0, - (GRAV_CONSTANT * EARTH_MASS * ELEMENT_MASS) / (EARTH_RAD ** 2))
         for vert in self.verts:
@@ -417,16 +415,16 @@ class ForceObject:
         final_finite = FEModel3D()
         extracted = self.verts
         E, G, Iy, Iz, J, A = mat.as_list()
-        for node in extracted:
-            final_finite.add_node(str(node), node.loc[0], node.loc[1], node.loc[2])
+        for i, node in enumerate(extracted):
+            final_finite.add_node(str(i), node.loc[0], node.loc[1], node.loc[2])
         for j, edge in enumerate(self.edges):
-            final_finite.add_member("C" + str(j), str(extracted[edge[0]]), str(extracted[edge[1]]), E, G, Iy, Iz, J, A)
+            final_finite.add_member("C" + str(j), str(edge[0]), str(edge[1]), E, G, Iy, Iz, J, A)
         for k, fnode in enumerate(extracted):
-            final_finite.add_node_load(str(fnode), Direction='FX', P=fnode.dir.x,
+            final_finite.add_node_load(str(k), Direction='FX', P=fnode.dir.x,
                                        case="Case 1")
-            final_finite.add_node_load(str(fnode), Direction='FY', P=fnode.dir.y,
+            final_finite.add_node_load(str(k), Direction='FY', P=fnode.dir.y,
                                        case="Case 1")
-            final_finite.add_node_load(str(fnode), Direction='FZ', P=fnode.dir.z,
+            final_finite.add_node_load(str(k), Direction='FZ', P=fnode.dir.z,
                                        case="Case 1")
         return final_finite
 
@@ -771,26 +769,96 @@ def load_obj_pickle(file_name: str) -> object:
     return final
 
 
-def render_finite(model: FEModel3D, deform: bool = False) -> None:
+def render_finite(model: FEModel3D, deform: bool = False, save_path: str = "") -> None:
     """ Analyzes a FEModel3D then renders them to a custom output
     :param model: FEModel3D : Generated and correctly loaded finite element model
     :param deform: Boolean : Determines whether force based deformation will be displayed upon render
+    :param save_path: Determines the path to which the analyzed model will be saved to. No save if unspecified.
     :return: None
     """
+    # Performs Finite Element Analysis on loaded model
     force_finite.analyze(log=True, check_statics=True)
+    
+    # Brings global variables USE_DILL and USE_PICKLE into the function scope
+    global USE_DILL, USE_PICKLE
+    
+    # Saves FEM analysis results to specified filepath
+    if save_path != "":
+        if USE_DILL:
+            try:
+                save_obj(force_finite, save_path)
+            except PermissionError:
+                print(f"Object could not be saved due to: PermissionError on filepath {save_path}")
+        elif USE_PICKLE:
+            try:
+                save_obj_pickle(force_finite, save_path)
+            except PermissionError:
+                print(f"Object could not be saved due to: PermissionError on filepath {save_path}")
+                
+    # Creates Renderer object which takes in analyzed FEM Model
     finite_renderer = Renderer(model)
-    finite_renderer.annotation_size = 0.2
-    if deform:
-        finite_renderer.deformed_shape = True
-        finite_renderer.deform_scale = 200
-    else:
-        finite_renderer.deformed_shape = False
+
+    # Sets Renderer parameters
     finite_renderer.color_map = "Mx"
-    finite_renderer.combo_name = "Combo 1"
-    finite_renderer.labels = True
+    finite_renderer.annotation_size = 0.2
+    finite_renderer.deformed_shape = deform
+    finite_renderer.labels = False
     finite_renderer.scalar_bar = True
     finite_renderer.scalar_bar_text_size = 15
+
+    # Renders the model. This creates a new window that will lock Blender as a program in order to
     finite_renderer.render_model()
+
+
+def render_finite_from_file(file_path: str, deform: bool = False) -> None:
+    """ Renders a pre-analyzed FEM model from a file
+    :param file_path: Filepath from which the finite element model will be loaded. This must include file name.
+    :param deform: Determines whether force based deformation will be displayed upon render
+    :return: None
+    """
+    finite_model = None
+
+    # Brings global variables USE_DILL and USE_PICKLE into the function scope
+    global USE_DILL, USE_PICKLE
+    
+    try:
+        # Attempts to load the file from a specified filepath
+        if USE_DILL:
+            # Attempts to use dill as the first option to load from
+            finite_model = load_obj(file_path)
+        elif USE_PICKLE:
+            # Attempts to use pickle as a backup if dill is not found
+            finite_model = load_obj_pickle(file_path)
+        else:
+            # If neither pickle nor dill are found the file cannot be loaded
+            print("Object could not be loaded due to: No save options available (Please install Pickle or Dill)")
+            return
+    except FileNotFoundError:
+        print(f"Object could not be loaded due to: FileNotFoundError for filepath {file_path}")
+        return
+    except PermissionError:
+        print(f"Object could not be loaded due to: PermissionError for filepath {file_path}")
+        return
+    
+    if finite_model:
+        # Creates Renderer object which takes in analyzed FEM Model
+        finite_renderer = Renderer(finite_model)
+
+        # Sets Renderer parameters
+        finite_renderer.color_map = "Mx"
+        finite_renderer.annotation_size = 0.2
+        finite_renderer.deformed_shape = deform
+        finite_renderer.labels = False
+        finite_renderer.scalar_bar = True
+        finite_renderer.scalar_bar_text_size = 15
+
+        # Renders the model. This creates a new window that will lock Blender as a program in order to
+        finite_renderer.render_model()
+    
+    else:
+        # finite_model is either None or some other un-analyzable data
+        print("Object not loaded properly, possibly empty")
+
 
 async def load_fobjects(obj_list: list[object]) -> list[ForceObjType]:
     force_objects_async = [force_obj_from_raw_async(ob) for ob in obj_list]
@@ -804,26 +872,23 @@ if __name__ == "__main__":
 
     obj = CTX.active_object
     bpy_objects = [obj for obj in bpy.data.objects if obj.type == "MESH"]
-    start_time = time.time()
+
     if USE_ASYNC:
         force_objects = asyncio.run(load_fobjects(bpy_objects))
-    else:  # FIX THIS UP
+    else:
         force_objects = [force_obj_from_raw(ob) for ob in bpy_objects]
-    end_time = time.time()
-    print(end_time - start_time)
-    #print(len(force_objects[0]))
 
     force_objects[0].mesh_link_chain(force_objects[1:])
 
     if USE_PYNITE:
         force_finite = force_objects[0].to_finite(MaterialEnum.STEEL.value)
-        render_finite(force_finite)
+        render_finite(force_finite, deform=False)
 
     x = BlendObject("ham", force_objects[0].verts, force_objects[0].edges)
 
     # Object save + load testing
 
-    if USE_DILL:  # SAVE_BASEPATH +
+    if USE_DILL:
         save_obj(x, "temp_blobject.pkl")
         y = load_obj("temp_blobject")
     elif USE_PICKLE:
