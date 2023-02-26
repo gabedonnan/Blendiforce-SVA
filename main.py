@@ -133,12 +133,18 @@ class VectorTup:
         self.x, self.y, self.z = state["x"], state["y"], state["z"]
 
     def normalise(self) -> None:
+        """ Calculates normalised version of vector without returning
+        :return: None
+        """
         magnitude = math.sqrt(self.x * self.x + self.y * self.y + self.z * self.z)
         self.x = self.x / magnitude
         self.y = self.y / magnitude
         self.z = self.z / magnitude
 
     def get_normalised(self) -> VectorType:
+        """ Calculates and returns normalised version of vector
+        :return: Normalised vector
+        """
         magnitude = math.sqrt(self.x * self.x + self.y * self.y + self.z * self.z)
         x_temp = self.x / magnitude
         y_temp = self.y / magnitude
@@ -151,6 +157,10 @@ class VectorTup:
                          self.x * other.y - self.y * other.x)
 
     def set_magnitude(self, magnitude: int) -> None:
+        """ Normalises vector then multiplies it by given magnitude
+        :param magnitude: Magnitude to set vector to
+        :return: None
+        """
         ini_magnitude = math.sqrt(self.x * self.x + self.y * self.y + self.z * self.z)
         self.x = (self.x / ini_magnitude) * magnitude
         self.y = (self.y / ini_magnitude) * magnitude
@@ -164,15 +174,16 @@ class VectorTup:
 
 
 class Material:
-    def __init__(self, name: str, E: float, G: float, rad: float = 0.01) -> None:
+    def __init__(self, name: str, E: float, G: float, rad: float = 10) -> None:
         """These parameters are all specific named properties of a material
         'Members' refers to the edges from vertex to vertex in the object
         :param name: String
         :param E: Float: Modulus of elasticity of material members
-        :unit: Pascals
+        :unit: Pascals (N / M2)
         :param G: Float: Shear modulus of material members
-        :unit: Pascals
+        :unit: Pascals (N / M2)
         :param rad: Float: Radius of elements, treated as circles
+        :unit: Meters
         :Iy: Float: Moment of inertia of material's members about their local y-axis
         :Iz: Float: Moment of inertia of material's members about their local z-axis
         :J: Float: Polar moment of inertia of the material's members
@@ -778,10 +789,10 @@ def render_finite(model: FEModel3D, deform: bool = False, save_path: str = "") -
     """
     # Performs Finite Element Analysis on loaded model
     force_finite.analyze(log=True, check_statics=True)
-    
+
     # Brings global variables USE_DILL and USE_PICKLE into the function scope
     global USE_DILL, USE_PICKLE
-    
+
     # Saves FEM analysis results to specified filepath
     if save_path != "":
         if USE_DILL:
@@ -794,7 +805,7 @@ def render_finite(model: FEModel3D, deform: bool = False, save_path: str = "") -
                 save_obj_pickle(force_finite, save_path)
             except PermissionError:
                 print(f"Object could not be saved due to: PermissionError on filepath {save_path}")
-                
+
     # Creates Renderer object which takes in analyzed FEM Model
     finite_renderer = Renderer(model)
 
@@ -820,7 +831,7 @@ def render_finite_from_file(file_path: str, deform: bool = False) -> None:
 
     # Brings global variables USE_DILL and USE_PICKLE into the function scope
     global USE_DILL, USE_PICKLE
-    
+
     try:
         # Attempts to load the file from a specified filepath
         if USE_DILL:
@@ -839,7 +850,7 @@ def render_finite_from_file(file_path: str, deform: bool = False) -> None:
     except PermissionError:
         print(f"Object could not be loaded due to: PermissionError for filepath {file_path}")
         return
-    
+
     if finite_model:
         # Creates Renderer object which takes in analyzed FEM Model
         finite_renderer = Renderer(finite_model)
@@ -854,7 +865,7 @@ def render_finite_from_file(file_path: str, deform: bool = False) -> None:
 
         # Renders the model. This creates a new window that will lock Blender as a program in order to
         finite_renderer.render_model()
-    
+
     else:
         # finite_model is either None or some other un-analyzable data
         print("Object not loaded properly, possibly empty")
@@ -882,16 +893,4 @@ if __name__ == "__main__":
 
     if USE_PYNITE:
         force_finite = force_objects[0].to_finite(MaterialEnum.STEEL.value)
-        render_finite(force_finite, deform=False)
-
-    x = BlendObject("ham", force_objects[0].verts, force_objects[0].edges)
-
-    # Object save + load testing
-
-    if USE_DILL:
-        save_obj(x, "temp_blobject.pkl")
-        y = load_obj("temp_blobject")
-    elif USE_PICKLE:
-        save_obj_pickle(x, "temp_blobject.pkl")
-        y = load_obj_pickle("temp_blobject")
-    x.make(fast=True)
+        render_finite(force_finite, deform=False, save_path="C:\\Users\\Gabriel\\Documents\\")
