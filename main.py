@@ -1,3 +1,5 @@
+import time
+
 from enum import Enum
 import math
 import random
@@ -651,7 +653,7 @@ def force_obj_from_raw(obj: str | object, default_mass: float = 1) -> ForceObjTy
     else:
         temp_obj = obj
 
-    ob["MASS"] = default_mass  # For testing
+    obj["MASS"] = default_mass  # For testing
 
     obj_mass = obj["MASS"]  # Accesses object's custom property "MASS"
 
@@ -685,7 +687,7 @@ async def force_obj_from_raw_async(obj: str | object, default_mass: float = 1) -
     else:
         temp_obj = obj
 
-    ob["MASS"] = default_mass  # For testing
+    obj["MASS"] = default_mass  # For testing
 
     obj_mass = obj["MASS"]  # Accesses object's custom property "MASS"
 
@@ -790,6 +792,9 @@ def render_finite(model: FEModel3D, deform: bool = False) -> None:
     finite_renderer.scalar_bar_text_size = 15
     finite_renderer.render_model()
 
+async def load_fobjects(obj_list: list[object]) -> list[ForceObjType]:
+    force_objects_async = [force_obj_from_raw_async(ob) for ob in obj_list]
+    return await asyncio.gather(*force_objects_async)
 
 if __name__ == "__main__":
     # Convenient constants
@@ -799,15 +804,14 @@ if __name__ == "__main__":
 
     obj = CTX.active_object
     bpy_objects = [obj for obj in bpy.data.objects if obj.type == "MESH"]
+    start_time = time.time()
     if USE_ASYNC:
-        force_objects = []
-        for ob in bpy_objects:
-            print(ob.name)
-            force_objects.append(force_obj_from_raw(ob))
-
+        force_objects = asyncio.run(load_fobjects(bpy_objects))
     else:  # FIX THIS UP
-        force_objects = [force_obj_from_raw_async(ob) for ob in bpy_objects]
-    print(len(force_objects[0]))
+        force_objects = [force_obj_from_raw(ob) for ob in bpy_objects]
+    end_time = time.time()
+    print(end_time - start_time)
+    #print(len(force_objects[0]))
 
     force_objects[0].mesh_link_chain(force_objects[1:])
 
@@ -819,10 +823,10 @@ if __name__ == "__main__":
 
     # Object save + load testing
 
-    if USE_DILL:
-        save_obj(x, SAVE_BASEPATH + "temp_blobject.pkl")
-        y = load_obj(SAVE_BASEPATH + "temp_blobject")
+    if USE_DILL:  # SAVE_BASEPATH +
+        save_obj(x, "temp_blobject.pkl")
+        y = load_obj("temp_blobject")
     elif USE_PICKLE:
-        save_obj_pickle(x, SAVE_BASEPATH + "temp_blobject.pkl")
-        y = load_obj_pickle(SAVE_BASEPATH + "temp_blobject")
+        save_obj_pickle(x, "temp_blobject.pkl")
+        y = load_obj_pickle("temp_blobject")
     x.make(fast=True)
