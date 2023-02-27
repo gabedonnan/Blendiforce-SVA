@@ -303,15 +303,15 @@ class MaterialEnum(Enum):
 # Object populated with edges
 class ForceObject:
     def __init__(self, verts: list[ForceVertType],
-                 edges: list[list[int]], mass: float) -> None:
+                 edges: list[list[int]], density: float) -> None:
         """
-        :param verts: List[VectorTup]
+        :param verts: List[ForceVertex]
         :param edges: List[List[Int]] : Inner list of len 2
         :param mass: float : kilograms
         """
         self.verts = verts
         self.edges = edges
-        self.mass = mass
+        self.mass = 1
         print(f"Force Object Initialised: {len(self.verts)} Verts, {len(self.edges)} Edges")
 
     def __repr__(self) -> str:
@@ -475,16 +475,75 @@ class ForceObject:
         return final
 
     @staticmethod
-    def edge_mass(length: float, radius: float, density: float) -> float:
+    def get_edge_mass(length: float, radius: float, density: float) -> float:
         """ Calculates and returns the "mass" of an edge E.
         Calculated as if the edge were a cylinder.
         :param length: length of cylinder
         :param radius: pre-defined cylinder radius
-        :param density: Kg/M3
-        :return: Volume * density = mass
+        :param density: cylinder material density
+        :unit: Kg/M3
+        :return: calculated mass via visible formula
         """
         return math.pi * (radius ** 2) * length * density
 
+    @staticmethod
+    def get_edge_rad(length: float, mass: float, density: float) -> float:
+        """ Gets radius of cylindrical representation of an edge
+        Must be given its length, mass and density
+        :param length: length of cylinder
+        :param mass: cylinder mass
+        :param density: cylinder material density
+        :unit: Kg/M3
+        :return: calculated radius based on formula
+        """
+        if length == 0 or density == 0:  # Prevents divide by zero error
+            return 0
+        return math.sqrt(mass / (length * density * math.pi))
+
+
+class ForceObjectUniformMass(ForceObject):
+    def __init__(self, verts: list[ForceVertType], edges: list[list[int]], density: float, mass: float):
+        """ Subclass of ForceObject which enforces uniform masses along each edge of the object
+        This uniform mass means that the radii of each edge can vary given uniform density
+        Each edge is treated as a cylinder
+        :param verts: List of vertices
+        :param edges: List of edges (pairs of vertex indices)
+        :param density: Density of the material the object is made out of
+        :param mass: Enforced mass of overall object, must be divided by edge number for edgewise mass
+        """
+        super().__init__(verts, edges, density)
+        average_edge_mass = mass / len(edges)  # Divides overall mass for edgewise mass
+        self.edge_masses = [average_edge_mass] * len(self.edges)
+
+        # Gets a list of lengths of each edge (distances between point A and B in edge (A,B))
+        distances = [self.verts[edge[0]].get_euclidean_distance(self.verts[edge[1]]) for edge in self.edges]
+
+        # Gets the radii of each edge given fixed mass and the length of each edge
+        self.edge_rads = [self.get_edge_rad(dist, average_edge_mass, density) for dist in distances]
+        self.mass = mass
+
+
+class ForceObjectUniformRad(ForceObject):
+    def __init__(self, verts: list[ForceVertType], edges: list[list[int]], density: float, radius: float):
+        """ Subclass of ForceObject which enforces uniform "radius" of each edge represented as a cylinder
+        This uniform edge radius means that each edge gets to have different mass
+        This also allows us to calculate the overall mass of the object given the information we have
+        :param verts: List of vertices
+        :param edges: List of edges (pairs of vertex indices)
+        :param density: Density of the material the object is made out of
+        :param radius: Enforced radius of cylindrical representation of each edge in object
+        """
+        super().__init__(verts, edges, density)
+        self.edge_rads = [radius] * len(edges)
+
+        # Gets a list of lengths of each edge (distances between point A and B in edge (A,B))
+        distances = [self.verts[edge[0]].get_euclidean_distance(self.verts[edge[1]]) for edge in self.edges]
+
+        # Gets the masses of each edge given fixed radius
+        self.edge_masses = [self.get_edge_mass(dist, radius, density) for dist in distances]
+
+        # Overall mass is sum of calculated edge masses
+        self.mass = sum(self.edge_masses)
 
 class ForceVertex:
     def __init__(self, loc: VectorType, direction: VectorType) -> None:
@@ -674,20 +733,17 @@ def create_new_shader(material_name: str, rgb: tuple[float]) -> object:
 
 
 # Creates a force object simply using raw vertex and edge data
-def force_obj_from_raw(obj: str | object) -> ForceObjType:
+def force_obj_from_raw_mass(obj: str | object, mass: float,
+                       obj_material: MaterialType = MaterialEnum.STEEL.value) -> ForceObjType:
     """ Creates a ForceObject from raw blender object data
     :param obj: Blender object or String [Object Name]
+    :param obj_material: Material object passed in to determine the density of final force object
     :return: ForceObject(Vertices: List[ForceVertex], Edges: List[Vert1, Vert2], Mass: float)
     """
     if isinstance(obj, str):
         temp_obj = bpy.data.objects[obj]
     else:
         temp_obj = obj
-
-    if "MASS" not in temp_obj:  # Assigns object mass if it does not yet exist
-        temp_obj["MASS"] = 1
-
-    obj_mass = temp_obj["MASS"]  # Accesses object's custom property "MASS"
 
     temp_dat = temp_obj.data
     vert_num = len(temp_dat.vertices)
@@ -698,30 +754,26 @@ def force_obj_from_raw(obj: str | object) -> ForceObjType:
         temp_glob = temp_obj.matrix_world @ temp_dat.vertices[i].co  # Translation to global coords
         global_verts.append(ForceVertex(VectorTup(temp_glob[0], temp_glob[1], temp_glob[2]), VectorTup(0, 0, 0)))
 
-    for j in range(edge_num):
+    for j in range(edge_num):  # LOOK INTO THIS, MAY BE SOURCE OF INEFFICIENCY
         edge_verts = temp_dat.edges[j].vertices
         global_edges.append([edge_verts[0], edge_verts[1]])
 
-    final = ForceObject(global_verts, global_edges, obj_mass)
+    final = ForceObjectUniformMass(global_verts, global_edges, obj_material.density, mass)
     final.apply_gravity()
     return final
-
 
 # Creates a force object simply using raw vertex and edge data
-async def force_obj_from_raw_async(obj: str | object, default_mass: float = 1) -> ForceObjType:  # Obj is object identifier
-    """ Creates a ForceObject from raw blender object data asynchronously
-    Has the potential to work faster with further asynchronous
+def force_obj_from_raw_rad(obj: str | object, radius: float,
+                       obj_material: MaterialType = MaterialEnum.STEEL.value) -> ForceObjType:
+    """ Creates a ForceObject from raw blender object data
     :param obj: Blender object or String [Object Name]
+    :param obj_material: Material object passed in to determine the density of final force object
     :return: ForceObject(Vertices: List[ForceVertex], Edges: List[Vert1, Vert2], Mass: float)
     """
     if isinstance(obj, str):
         temp_obj = bpy.data.objects[obj]
     else:
         temp_obj = obj
-
-    obj["MASS"] = default_mass  # For testing
-
-    obj_mass = obj["MASS"]  # Accesses object's custom property "MASS"
 
     temp_dat = temp_obj.data
     vert_num = len(temp_dat.vertices)
@@ -732,14 +784,13 @@ async def force_obj_from_raw_async(obj: str | object, default_mass: float = 1) -
         temp_glob = temp_obj.matrix_world @ temp_dat.vertices[i].co  # Translation to global coords
         global_verts.append(ForceVertex(VectorTup(temp_glob[0], temp_glob[1], temp_glob[2]), VectorTup(0, 0, 0)))
 
-    for j in range(edge_num):
+    for j in range(edge_num):  # LOOK INTO THIS, MAY BE SOURCE OF INEFFICIENCY
         edge_verts = temp_dat.edges[j].vertices
         global_edges.append([edge_verts[0], edge_verts[1]])
 
-    final = ForceObject(global_verts, global_edges, obj_mass)
+    final = ForceObjectUniformRad(global_verts, global_edges, obj_material.density, radius)
     final.apply_gravity()
     return final
-
 
 def save_obj(obj: object, file_name: str) -> None:
     """
@@ -823,11 +874,15 @@ def render_finite(model: FEModel3D, deform: bool = False, save_path: str = "") -
                 save_obj(force_finite, save_path)
             except PermissionError:
                 print(f"Object could not be saved due to: PermissionError on filepath {save_path}")
+            except FileNotFoundError:
+                print(f"Object could not be saved due to: FileNotFoundError on filepath {save_path}")
         elif USE_PICKLE:
             try:
                 save_obj_pickle(force_finite, save_path)
             except PermissionError:
                 print(f"Object could not be saved due to: PermissionError on filepath {save_path}")
+            except FileNotFoundError:
+                print(f"Object could not be saved due to: FileNotFoundError on filepath {save_path}")
 
     # Creates Renderer object which takes in analyzed FEM Model
     finite_renderer = Renderer(model)
@@ -894,11 +949,6 @@ def render_finite_from_file(file_path: str, deform: bool = False) -> None:
         print("Object not loaded properly, possibly empty")
 
 
-async def load_fobjects(obj_list: list[object]) -> list[ForceObjType]:
-    force_objects_async = [force_obj_from_raw_async(ob) for ob in obj_list]
-    return await asyncio.gather(*force_objects_async)
-
-
 if __name__ == "__main__":
     # Convenient constants
     CTX = bpy.context
@@ -908,10 +958,7 @@ if __name__ == "__main__":
     obj = CTX.active_object
     bpy_objects = [obj for obj in bpy.data.objects if obj.type == "MESH"]
 
-    if USE_ASYNC:
-        force_objects = asyncio.run(load_fobjects(bpy_objects))
-    else:
-        force_objects = [force_obj_from_raw(ob) for ob in bpy_objects]
+    force_objects = [force_obj_from_raw_mass(ob, 100) for ob in bpy_objects]
 
     force_objects[0].mesh_link_chain(force_objects[1:])
 
