@@ -174,10 +174,12 @@ class VectorTup:
 
 
 class Material:
-    def __init__(self, name: str, E: float, G: float, rad: float = 10) -> None:
+    def __init__(self, name: str, density: float, E: float, G: float, rad: float = 10) -> None:
         """These parameters are all specific named properties of a material
         'Members' refers to the edges from vertex to vertex in the object
         :param name: String
+        :param density: Float: Density of elements, used to calculate their mass
+        :unit: Kg/M3
         :param E: Float: Modulus of elasticity of material members
         :unit: Pascals (N / M2)
         :param G: Float: Shear modulus of material members
@@ -190,6 +192,7 @@ class Material:
         :A: Float: Cross-sectional area of material's members (Internal beam areas)
         """
         self.name = name
+        self.density = density
         self.E = E
         self.G = G
         self.Iy = (math.pi * (rad ** 4)) / 4
@@ -198,50 +201,57 @@ class Material:
         self.A = math.pi * (rad ** 2)
 
     def __repr__(self) -> str:
-        return f"Material: {self.name} [{self.E}, {self.G}, {self.Iy}, {self.Iz}, {self.J}, {self.A}]"
+        return f"Material: {self.name} [{self.density}, {self.E}, {self.G}, {self.Iy}, {self.Iz}, {self.J}, {self.A}]"
 
     def __str__(self) -> str:
-        return f"{self.name} [E: {self.E}, G: {self.G}, Iy: {self.Iy}, Iz: {self.Iz}, J: {self.J}, A: {self.A}]"
+        return f"""{self.name} 
+        [Density: {self.density}, E: {self.E}, G: {self.G}, Iy: {self.Iy}, Iz: {self.Iz}, J: {self.J}, A: {self.A}]"""
 
     def __getitem__(self, key) -> float:
-        if key == 0 or key == "E":
+        if key == 0 or key.lower() == "density":
+            return self.density
+        elif key == 1 or key == "E":
             return self.E
-        elif key == 1 or key == "G":
+        elif key == 2 or key == "G":
             return self.G
-        elif key == 2 or key == "Iy":
+        elif key == 3 or key == "Iy":
             return self.Iy
-        elif key == 3 or key == "Iz":
+        elif key == 4 or key == "Iz":
             return self.Iz
-        elif key == 4 or key == "J":
+        elif key == 5 or key == "J":
             return self.J
-        elif key == 5 or key == "A":
+        elif key == 6 or key == "A":
             return self.A
         raise Exception("Invalid key: Material")
 
     def __setitem__(self, key, value: float) -> None:
-        if key == 0 or key == "E":
+        if key == 0 or key.lower() == "density":
+            self.density = value
+        elif key == 1 or key == "E":
             self.E = value
-        elif key == 1 or key == "G":
+        elif key == 2 or key == "G":
             self.G = value
-        elif key == 2 or key == "Iy":
+        elif key == 3 or key == "Iy":
             self.Iy = value
-        elif key == 3 or key == "Iz":
+        elif key == 4 or key == "Iz":
             self.Iz = value
-        elif key == 4 or key == "J":
+        elif key == 5 or key == "J":
             self.J = value
-        elif key == 5 or key == "A":
+        elif key == 6 or key == "A":
             self.A = value
         raise Exception("Invalid Key: Material")
 
     def __len__(self) -> int:
-        return 6
+        return 7
 
     def __getstate__(self) -> dict:
-        return {"E": self.E, "G": self.G,
-                "Iy": self.Iy, "Iz": self.Iz,
-                "J": self.J, "A": self.A}
+        return {"density": self.density, "E": self.E,
+                "G": self.G, "Iy": self.Iy,
+                "Iz": self.Iz, "J": self.J,
+                "A": self.A}
 
     def __setstate__(self, state: dict) -> None:
+        self.density = state["density"]
         self.E = state["E"]
         self.G = state["G"]
         self.Iy = state["Iy"]
@@ -249,8 +259,8 @@ class Material:
         self.J = state["J"]
         self.A = state["A"]
 
-    def as_list(self) -> list[float]:
-        return [self.E, self.G, self.Iy, self.Iz, self.J, self.A]
+    def as_tup(self) -> list[float]:
+        return self.density, self.E, self.G, self.Iy, self.Iz, self.J, self.A
 
     def recalc_radius(self, rad: float = 0.01) -> None:
         self.Iy = (math.pi * (rad ** 4)) / 4
@@ -262,31 +272,32 @@ class Material:
 class MaterialEnum(Enum):
     """
     Enum class containing pre-definitions for materials to be used
+    Material format is: Name, Density, Modulus of Elasticity, Shear Modulus
     """
     # Steel material from:
     # https://www.metalformingmagazine.com/article/?/materials/high-strength-steel/metal-properties-elastic-modulus
-    STEEL = Material("STEEL", 2.1e11, 7.93e10)
+    STEEL = Material("STEEL", 7900, 2.1e11, 7.93e10)
 
     # Birch material from: https://www.matweb.com/search/datasheet_print.aspx?matguid=c499c231f20d4284a4da8bea3d2644fc
-    BIRCH = Material("WOOD_BIRCH", 1.186e10, 8.34e6)
+    BIRCH = Material("WOOD_BIRCH", 640, 1.186e10, 8.34e6)
 
     # Oak material from: https://www.matweb.com/search/DataSheet.aspx?MatGUID=ea505704d8d343f2800de42db7b16de8&ckck=1
     # Green oak specifically
-    OAK = Material("WOOD_OAK", 7.86e9, 6.41e6)
+    OAK = Material("WOOD_OAK", 750, 7.86e9, 6.41e6)
 
     # Granite material from: https://www.matweb.com/search/datasheet.aspx?matguid=3d4056a86e79481cb6a80c89caae1d90
     # and https://www.sciencedirect.com/science/article/pii/S1674775522000993
-    GRANITE = Material("GRANITE", 4e10, 6.1e7)
+    GRANITE = Material("GRANITE", 1463, 4e10, 6.1e7)
 
     # Diamond material from: http://www.chm.bris.ac.uk/motm/diamond/diamprop.htm
     # and https://arxiv.org/ftp/arxiv/papers/1811/1811.09503.pdf
-    DIAMOND = Material("DIAMOND", 1.22e12, 5.3e11)
+    DIAMOND = Material("DIAMOND", 3340, 1.22e12, 5.3e11)
 
     # Plastic material from: https://designerdata.nl/materials/plastics/thermo-plastics/low-density-polyethylene
-    POLYETHYLENE = Material("PLASTIC_POLYETHYLENE", 3e8, 2.25e8)
+    POLYETHYLENE = Material("PLASTIC_POLYETHYLENE", 955, 3e8, 2.25e8)
 
     # Plastic material from: https://www.matweb.com/search/datasheet_print.aspx?matguid=e19bc7065d1c4836a89d41ff23d47413
-    PVC = Material("PLASTIC_PVC", 1.7e9, 6.35e7)
+    PVC = Material("PLASTIC_PVC", 1300, 1.7e9, 6.35e7)
 
 
 # Object populated with edges
@@ -425,7 +436,7 @@ class ForceObject:
         """
         final_finite = FEModel3D()
         extracted = self.verts
-        E, G, Iy, Iz, J, A = mat.as_list()
+        density, E, G, Iy, Iz, J, A = mat.as_tup()
         for i, node in enumerate(extracted):
             final_finite.add_node(str(i), node.loc[0], node.loc[1], node.loc[2])
         for j, edge in enumerate(self.edges):
@@ -462,6 +473,17 @@ class ForceObject:
             final += vert.loc
         final /= len(self.verts)
         return final
+
+    @staticmethod
+    def edge_mass(length: float, radius: float, density: float) -> float:
+        """ Calculates and returns the "mass" of an edge E.
+        Calculated as if the edge were a cylinder.
+        :param length: length of cylinder
+        :param radius: pre-defined cylinder radius
+        :param density: Kg/M3
+        :return: Volume * density = mass
+        """
+        return math.pi * (radius ** 2) * length * density
 
 
 class ForceVertex:
@@ -652,7 +674,7 @@ def create_new_shader(material_name: str, rgb: tuple[float]) -> object:
 
 
 # Creates a force object simply using raw vertex and edge data
-def force_obj_from_raw(obj: str | object, default_mass: float = 1) -> ForceObjType:  # Obj is object identifier
+def force_obj_from_raw(obj: str | object) -> ForceObjType:
     """ Creates a ForceObject from raw blender object data
     :param obj: Blender object or String [Object Name]
     :return: ForceObject(Vertices: List[ForceVertex], Edges: List[Vert1, Vert2], Mass: float)
@@ -662,9 +684,10 @@ def force_obj_from_raw(obj: str | object, default_mass: float = 1) -> ForceObjTy
     else:
         temp_obj = obj
 
-    obj["MASS"] = default_mass  # For testing
+    if "MASS" not in temp_obj:  # Assigns object mass if it does not yet exist
+        temp_obj["MASS"] = 1
 
-    obj_mass = obj["MASS"]  # Accesses object's custom property "MASS"
+    obj_mass = temp_obj["MASS"]  # Accesses object's custom property "MASS"
 
     temp_dat = temp_obj.data
     vert_num = len(temp_dat.vertices)
@@ -811,11 +834,11 @@ def render_finite(model: FEModel3D, deform: bool = False, save_path: str = "") -
 
     # Sets Renderer parameters
     finite_renderer.color_map = "Mx"
-    finite_renderer.annotation_size = 0.2
+    finite_renderer.annotation_size = 0.1
     finite_renderer.deformed_shape = deform
     finite_renderer.labels = False
     finite_renderer.scalar_bar = True
-    finite_renderer.scalar_bar_text_size = 15
+    finite_renderer.scalar_bar_text_size = 10
 
     # Renders the model. This creates a new window that will lock Blender as a program in order to
     finite_renderer.render_model()
@@ -875,6 +898,7 @@ async def load_fobjects(obj_list: list[object]) -> list[ForceObjType]:
     force_objects_async = [force_obj_from_raw_async(ob) for ob in obj_list]
     return await asyncio.gather(*force_objects_async)
 
+
 if __name__ == "__main__":
     # Convenient constants
     CTX = bpy.context
@@ -893,4 +917,4 @@ if __name__ == "__main__":
 
     if USE_PYNITE:
         force_finite = force_objects[0].to_finite(MaterialEnum.STEEL.value)
-        render_finite(force_finite, deform=False, save_path="C:\\Users\\Gabriel\\Documents\\")
+        render_finite(force_finite, deform=True, save_path="C:\\Users\\Gabriel\\Documents\\finite_mesh.pkl")
