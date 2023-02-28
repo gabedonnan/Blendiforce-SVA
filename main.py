@@ -259,7 +259,7 @@ class Material:
         self.J = state["J"]
         self.A = state["A"]
 
-    def as_tup(self) -> list[float]:
+    def as_tup(self) -> tuple[float]:
         return self.density, self.E, self.G, self.Iy, self.Iz, self.J, self.A
 
     def recalc_radius(self, rad: float = 0.01) -> None:
@@ -270,6 +270,10 @@ class Material:
 
     @staticmethod
     def return_recalc_radius(rad: float) -> tuple[float,float,float,float]:
+        """
+        :param rad: radius of object formed with material
+        :return: (Iy, Iz, J, A)
+        """
         return (math.pi * (rad ** 4)) / 4, (math.pi * (rad ** 4)) / 2, \
             (math.pi * ((2 * rad) ** 4)) / 32, math.pi * (rad ** 2)
 
@@ -315,10 +319,12 @@ class ForceObject:
         """
         self.verts = verts
         self.edges = edges
+        self.density = density
         self.mass = 1
         edgewise_mass = 1 / len(edges)
         self.edge_masses = [edgewise_mass] * len(edges)
         self.edge_rads = [10] * len(edges)
+        self.base_nodes = self.find_base(tolerance=0.01)
         print(f"Force Object Initialised: {len(self.verts)} Verts, {len(self.edges)} Edges")
 
     def __repr__(self) -> str:
@@ -368,6 +374,21 @@ class ForceObject:
             self.verts[vert_nums[0]].dir += gravitational_force
             self.verts[vert_nums[1]].dir += gravitational_force
 
+    def find_base(self, tolerance: float = 0) -> list[int]:
+        """ Finds nodes which the ForceObject would rest on if placed vertically downwards
+        :param tolerance:
+        :return:
+        """
+        min_height: float = math.inf
+        base_nodes = []
+        for i, vert in enumerate(self.verts):
+            if vert.loc.z + tolerance < min_height:
+                min_height = vert.loc.z
+                base_nodes = [i]
+            elif vert.loc.z - tolerance <= min_height <= vert.loc.z + tolerance:
+                base_nodes.append(i)
+        return base_nodes
+
     # Creates n links from each vertex in object 1 to vertices in object two
     def mesh_link(self, other: ForceObjType, num_links: int = 2) -> None:
         """ Does not interact with object faces
@@ -389,7 +410,7 @@ class ForceObject:
         for i, vert in enumerate(extracted):
             # Iterates through each vertex from the first object
 
-            min_dist = [float("inf")] * num_links  # Creates a list to carry currently found smallest distances
+            min_dist = [math.inf] * num_links  # Creates a list to carry currently found smallest distances
             temp_closest_nums = deque([None] * num_links) # Creates a deque to carry indices of found closest vertices
             # The deque data structure is used here as it is optimised for adding and removing left and rightmost vals
 
@@ -434,7 +455,7 @@ class ForceObject:
         :param num_links: Int : Defines how many links are created from each vertex
         :return: None
         """
-        MAX_DIST = float("inf")  # Very large constant
+        MAX_DIST = math.inf  # Very large constant
         extracted = [self.verts] # List containing lists of each object's vertices
 
         shifts = [0, len(extracted[0])]
@@ -496,18 +517,24 @@ class ForceObject:
             # This operation shifts each edge value to point to the correct verts in the new combined object
 
     # Creates a finite element model from a mesh
-    def to_finite(self, mat: MaterialType) -> object:  # Redo return typing
-        """ Works only for single material objects
+    def to_finite(self, mat: MaterialType) -> FEModel3D:  # Redo return typing
+        """ Compiles ForceObject to FEA model via the following steps:
+         - Loads in each node from the ForceObject
+         - Adds each edge from the ForceObject
+         - Adds each nodal force on the ForceObject
+         - Adds spring supports
+         - Adds standard supports
         :param mat: Material Object: Self defined material object, not blender material
         :return: FEModel3D Object
         """
         final_finite = FEModel3D()
+        spring_constant = 10000
         density, E, G, Iy, Iz, J, A = mat.as_tup()
         for i, node in enumerate(self.verts):
             final_finite.add_node(str(i), node.loc[0], node.loc[1], node.loc[2])
-        for j, edge in enumerate(zip(self.edges, self.edge_masses)):
-            temp = mat.return_recalc_radius()
-            final_finite.add_member("C" + str(j), str(edge[0]), str(edge[1]), E, G, Iy, Iz, J, A)
+        for j, (edge, rad) in enumerate(zip(self.edges, self.edge_rads)):
+            Iy, Iz, J, A = mat.return_recalc_radius(rad)
+            final_finite.add_member(f"Edge{j}", str(edge[0]), str(edge[1]), E, G, Iy, Iz, J, A)
         for k, fnode in enumerate(self.verts):
             final_finite.add_node_load(str(k), Direction='FX', P=fnode.dir.x,
                                        case="Case 1")
@@ -515,6 +542,20 @@ class ForceObject:
                                        case="Case 1")
             final_finite.add_node_load(str(k), Direction='FZ', P=fnode.dir.z,
                                        case="Case 1")
+
+        use_tension = True
+        use_compression = False
+
+        for l, base_node in enumerate(self.base_nodes):
+            vert_literal = self.verts[base_node]
+            final_finite.add_node(f"{l}s", vert_literal.loc[0], vert_literal.loc[1], vert_literal.loc[2] - 1)
+            # Adds node from which spring can be linked to corresponding base node
+
+            final_finite.add_spring(f"Spring{l}", str(l), f"{l}s",
+                                    spring_constant, tension_only=use_tension,
+                                    comp_only=use_compression)
+            use_tension, use_compression = not use_tension, not use_compression
+            # Alternates compression only and tension only springs to avoid model instability
         return final_finite
 
     def get_net_moment(self) -> VectorType:
