@@ -268,6 +268,10 @@ class Material:
         self.J = (math.pi * ((2 * rad) ** 4)) / 32
         self.A = math.pi * (rad ** 2)
 
+    @staticmethod
+    def return_recalc_radius(rad: float) -> tuple[float,float,float,float]:
+        return (math.pi * (rad ** 4)) / 4, (math.pi * (rad ** 4)) / 2, \
+            (math.pi * ((2 * rad) ** 4)) / 32, math.pi * (rad ** 2)
 
 class MaterialEnum(Enum):
     """
@@ -312,6 +316,9 @@ class ForceObject:
         self.verts = verts
         self.edges = edges
         self.mass = 1
+        edgewise_mass = 1 / len(edges)
+        self.edge_masses = [edgewise_mass] * len(edges)
+        self.edge_rads = [10] * len(edges)
         print(f"Force Object Initialised: {len(self.verts)} Verts, {len(self.edges)} Edges")
 
     def __repr__(self) -> str:
@@ -350,13 +357,16 @@ class ForceObject:
         Applies gravitational force to object vertex-wise based on the formula F = GMm/r2
         :return: None
         """
-        GRAV_CONSTANT = 6.67e-11  # Newton's gravitational constant, with unit Nm2kg-2
-        EARTH_MASS = 5.972e24  # Mass of the earth in kg
-        EARTH_RAD = 6.371e6  # Average radius of the earth in m
-        ELEMENT_MASS = self.mass / len(self.verts)  # Gets mass of each vertex
-        gravitational_force = VectorTup(0, 0, - (GRAV_CONSTANT * EARTH_MASS * ELEMENT_MASS) / (EARTH_RAD ** 2))
-        for vert in self.verts:
-            vert.dir += gravitational_force
+        grav_constant = 6.67e-11  # Newton's gravitational constant, with unit Nm2kg-2
+        earth_mass = 5.972e24  # Mass of the earth in kg
+        earth_rad = 6.371e6  # Average radius of the earth in m
+        inverse_rad = 1 / (earth_rad ** 2)  # Compute division outside loop for performance reasons
+
+        for vert_nums, element_mass in zip(self.edges, self.edge_masses):
+            # The calculated force must be halved as it is assumed to be evenly split over both vertices
+            gravitational_force = VectorTup(0, 0, - (grav_constant * earth_mass * element_mass * inverse_rad * 0.5))
+            self.verts[vert_nums[0]].dir += gravitational_force
+            self.verts[vert_nums[1]].dir += gravitational_force
 
     # Creates n links from each vertex in object 1 to vertices in object two
     def mesh_link(self, other: ForceObjType, num_links: int = 2) -> None:
@@ -368,30 +378,54 @@ class ForceObject:
         extracted = self.verts
         other_extracted = other.verts
         shift = len(extracted)
-        new_edges = []
-        num_links = int(num_links)
-        if num_links < 1:
+        # Shifts the indices of object two by the length of object one
+        # This is done such that the index of mesh two's first vertex is n+1 for n = length of mesh one
+
+        new_edges = deque([]) # Deque to contain pairs of vertices representing new edges to be made
+        # Deque used here as the only way new_edges will be modified is by appending, which is faster for a deque
+
+        if num_links < 1:  # Forces a positive amount of links
             num_links = 1
         for i, vert in enumerate(extracted):
-            min_dist = [9999] * num_links
-            temp_closest = [None] * num_links
-            temp_closest_nums = [None] * num_links
+            # Iterates through each vertex from the first object
+
+            min_dist = [float("inf")] * num_links  # Creates a list to carry currently found smallest distances
+            temp_closest_nums = deque([None] * num_links) # Creates a deque to carry indices of found closest vertices
+            # The deque data structure is used here as it is optimised for adding and removing left and rightmost vals
+
             for j, vert2 in enumerate(other_extracted):
-                temp_dist = vert.get_euclidean_distance(
-                    vert2)  # Gets euclidean distance between initial and second vert
+                # Iterates through each vertex from the other object
+
+                temp_dist = vert.get_euclidean_distance(vert2)
+                # Gets euclidean distance between initial and second vert
                 min_dist, flag = min_add(min_dist, temp_dist)
+                # Adds current distance to min_dist list in the correct position if it is less than any list values
+                # flag boolean indicates whether a new distance has been added to min_dist
+
                 if flag:
-                    temp_closest = [vert2] + temp_closest[:-1]  # add to beginning and pop last
-                    temp_closest_nums = [j + shift] + temp_closest_nums[:-1]
+                    temp_closest_nums.appendleft(j + shift)
+                    temp_closest_nums.pop()
+                    # If a new smallest distance has been found, performs both:
+                    # Removes largest distance edge of the temp_closest_nums list
+                    # Adds new small distance edge to temp_closest_nums list
+
             if None not in temp_closest_nums:
+                # Checks if appropriate closest nodes have been found
+                # This will only fail if len(other_extracted) < num_links
                 for vtc in temp_closest_nums:
-                    new_edges.append([i, vtc])
+                    # Iterates through the closest vertices that have been found for current vertex
+                    new_edges.append([i, vtc]) # Adds an edge from node i to node vtc
             else:
-                print("ERROR")
+                print("WARNING: ForceObject.mesh_link failed, meshes will not be linked")
+                return
 
         self.verts.extend(other_extracted)
+        # Adds second object's vertices to list of current object's vertices
         self.edges.extend(new_edges)
+        # Adds newly formed edges to current object's edges
         self.edges.extend([[edge_new[0] + shift, edge_new[1] + shift] for edge_new in other.edges])
+        # Adds second object's edges to first object
+        # This operation shifts each edge value to point to the correct verts in the new combined object
 
     def mesh_link_chain(self, others: list[ForceObjType], num_links: int = 2) -> None:
         """Creates n links from each vertex of every object to vertices in other objects in the list
@@ -400,33 +434,66 @@ class ForceObject:
         :param num_links: Int : Defines how many links are created from each vertex
         :return: None
         """
-        MAX_DIST = 99999  # Constant
-        extracted = [self.verts]
+        MAX_DIST = float("inf")  # Very large constant
+        extracted = [self.verts] # List containing lists of each object's vertices
+
         shifts = [0, len(extracted[0])]
-        new_edges = []
+        # List to shift the indices of all objects by the length of all objects that come before
+        # This is done such that the index of mesh m first vertex is n+1 for n = length of combined previous meshes
+
+        new_edges = deque([])  # Deque to contain pairs of vertices representing new edges to be made
+        # Deque used here as the only way new_edges will be modified is by appending, which is faster for a deque
+
         for item in others:  # Iterate through other objects
-            extracted.append(item.verts)
-            shifts.append(len(extracted[-1]) + shifts[-1])
+            extracted.append(item.verts)  # Adds vertex information of each other object to extracted
+            shifts.append(len(extracted[-1]) + shifts[-1])  # Adds new shifts for object m
+
         for mesh_num, active_mesh in enumerate(extracted):
+            # Iterates over each mesh to check for its closest links in all other meshes
+
             for vert_num, active_vert in enumerate(active_mesh):
-                min_dist = [MAX_DIST] * num_links
-                closest_indices = deque([None] * num_links)
+                # Iterates over each vertex in active mesh
+
+                min_dist = [MAX_DIST] * num_links  # Creates a list to carry currently found smallest distances
+                closest_indices = deque([None] * num_links)  # Creates a deque to hold indices of found closest vertices
+                # Deque is used here as it is optimised for adding and removing left and rightmost vals
+
                 for secondary_mesh_num in (n for n in range(len(extracted)) if n != mesh_num):
+                    # Iterates through all meshes other than active mesh
+                    # tuple comprehension used for the iterator for its performance over list
+
                     for secondary_vert_num, secondary_vert in enumerate(extracted[secondary_mesh_num]):
-                        temp_dist = active_vert.get_euclidean_distance(
-                            secondary_vert)
+                        # Iterates through all vertices in secondary mesh
+
+                        temp_dist = active_vert.get_euclidean_distance(secondary_vert)
+                        # Gets euclidean distance between initial and second vert
                         min_dist, flag = min_add(min_dist, temp_dist)
+                        # Inserts current distance to min_dist list if it is less than any list values
+                        # flag boolean indicates whether a new distance has been added to min_dist
+
                         if flag:
                             closest_indices.appendleft(secondary_vert_num + shifts[secondary_mesh_num])
                             closest_indices.pop()
+                            # If a new smallest distance has been found, performs both:
+                            # Removes largest distance edge of the closest_indices list
+                            # Adds new small distance edge to closest_indices list
+
                 for final_ind in closest_indices:
+                    # Loops through closest indices found for the active mesh
                     if [final_ind, vert_num + shifts[mesh_num]] not in new_edges:
+                        # Checks if the reverse of edge has been already added to the edge list
                         new_edges.append([vert_num + shifts[mesh_num], final_ind])
+                        # Adds edge from node vert_num with the correct shift to final_ind to the new_edges list
 
         self.edges.extend(new_edges)
+        # Adds newly formed edges to current object's edges
         for i, other in enumerate(others):
+            # Loops through all other objects and adds their information to the current object
             self.verts.extend(other.verts)
+            # Adds other object's vertices to list of current object's vertices
             self.edges.extend([[new_edge[0] + shifts[i + 1], new_edge[1] + shifts[i + 1]] for new_edge in other.edges])
+            # Adds other object's edges to first object
+            # This operation shifts each edge value to point to the correct verts in the new combined object
 
     # Creates a finite element model from a mesh
     def to_finite(self, mat: MaterialType) -> object:  # Redo return typing
@@ -435,13 +502,13 @@ class ForceObject:
         :return: FEModel3D Object
         """
         final_finite = FEModel3D()
-        extracted = self.verts
         density, E, G, Iy, Iz, J, A = mat.as_tup()
-        for i, node in enumerate(extracted):
+        for i, node in enumerate(self.verts):
             final_finite.add_node(str(i), node.loc[0], node.loc[1], node.loc[2])
-        for j, edge in enumerate(self.edges):
+        for j, edge in enumerate(zip(self.edges, self.edge_masses)):
+            temp = mat.return_recalc_radius()
             final_finite.add_member("C" + str(j), str(edge[0]), str(edge[1]), E, G, Iy, Iz, J, A)
-        for k, fnode in enumerate(extracted):
+        for k, fnode in enumerate(self.verts):
             final_finite.add_node_load(str(k), Direction='FX', P=fnode.dir.x,
                                        case="Case 1")
             final_finite.add_node_load(str(k), Direction='FY', P=fnode.dir.y,
@@ -737,6 +804,7 @@ def force_obj_from_raw_mass(obj: str | object, mass: float,
                        obj_material: MaterialType = MaterialEnum.STEEL.value) -> ForceObjType:
     """ Creates a ForceObject from raw blender object data
     :param obj: Blender object or String [Object Name]
+    :param mass: Enforced mass of entire object
     :param obj_material: Material object passed in to determine the density of final force object
     :return: ForceObject(Vertices: List[ForceVertex], Edges: List[Vert1, Vert2], Mass: float)
     """
@@ -767,6 +835,7 @@ def force_obj_from_raw_rad(obj: str | object, radius: float,
                        obj_material: MaterialType = MaterialEnum.STEEL.value) -> ForceObjType:
     """ Creates a ForceObject from raw blender object data
     :param obj: Blender object or String [Object Name]
+    :param radius: Enforced radius for each edge's cylinder representation
     :param obj_material: Material object passed in to determine the density of final force object
     :return: ForceObject(Vertices: List[ForceVertex], Edges: List[Vert1, Vert2], Mass: float)
     """
