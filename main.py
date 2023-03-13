@@ -536,7 +536,12 @@ class ForceObject:
         for i, node in enumerate(self.verts):
             final_finite.add_node(str(i), node.loc.x, node.loc.y, node.loc.z)
             if i not in self.base_nodes:
-                final_finite.def_support(str(i), support_DZ=True)
+                final_finite.def_support(
+                    str(i), 
+                    support_RX=True,
+                    support_RY=True,
+                    support_RZ=True
+                )
         for j, (edge, rad) in enumerate(zip(self.edges, self.edge_rads)):
             Iy, Iz, J, A = mat.return_recalc_radius(rad)
             final_finite.add_member(f"Edge{j}", str(edge[0]), str(edge[1]), E, G, Iy, Iz, J, A)
