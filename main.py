@@ -537,7 +537,7 @@ class ForceObject:
             final_finite.add_node(str(i), node.loc.x, node.loc.y, node.loc.z)
             if i not in self.base_nodes:
                 final_finite.def_support(
-                    str(i), 
+                    str(i),
                     support_RX=True,
                     support_RY=True,
                     support_RZ=True
@@ -609,6 +609,9 @@ class ForceObject:
             final += vert.loc
         final /= len(self.verts)
         return final
+
+    def to_blend_object(self) -> BlendObjectType:
+        return BlendObject(self.verts, self.edges)
 
     @staticmethod
     def get_edge_mass(length: float, radius: float, density: float) -> float:
@@ -729,8 +732,7 @@ class ForceVertex:
 
 # Representation of a blender object to be rendered in the scene
 class BlendObject:
-    def __init__(self, name: str, verts: list[ForceVertType], edges: list[list[int]]) -> None:
-        self.name = name
+    def __init__(self, verts: list[ForceVertType], edges: list[list[int]]) -> None:
         self.verts = [vert.loc for vert in verts]
         self.forces = [vert_force.dir for vert_force in verts]
         self.edges = edges  # Make sure these are of form bpy.context.object.data.edges
@@ -1160,19 +1162,27 @@ def render_finite_from_file(file_path: str, deform: bool = False) -> None:
         print("Object not loaded properly, possibly empty")
 
 
-if __name__ == "__main__":
-    # Convenient constants
-    CTX = bpy.context
-    DAT = bpy.data
-    OPS = bpy.ops
-
-    obj = CTX.active_object
+def unify_to_fobject() -> ForceObjType:
+    """
+    Takes all objects in the scene, links them together, forms them into a blender mesh
+    Then all other objects are deleted and the blender mesh is loaded into the scene
+    This blender mesh is then re-loaded into a ForceObject to be analysed
+    A little inefficient and roundabout however it is the simplest way to fix mesh instability
+    :return: ForceObject representation of linked scene meshes
+    """
     bpy_objects = [obj for obj in bpy.data.objects if obj.type == "MESH"]
-
     force_objects = [force_obj_from_raw_mass(ob, 100) for ob in bpy_objects]
-
     force_objects[0].mesh_link_chain(force_objects[1:])
+    bpy.ops.object.select_all(action="SELECT")
+    bpy.ops.object.delete()
+    force_objects[0].to_blend_object().make(fast=True)
+    bpy_object = bpy.data.objects[0]
+    return force_obj_from_raw_mass(bpy_object, 100)
 
+
+if __name__ == "__main__":
+    force_object_final = unify_to_fobject()
+    # If USE_PYNITE is false, the newly linked mesh is still rendered to the scene
     if USE_PYNITE:
-        force_finite = force_objects[0].to_finite(MaterialEnum.STEEL.value)
+        force_finite = force_object_final.to_finite(MaterialEnum.STEEL.value)
         render_finite(force_finite, deform=True, save_path="C:\\Users\\Gabriel\\Documents\\finite_mesh.pkl")
