@@ -1,4 +1,4 @@
-from __future__ import Annotations
+from __future__ import annotations
 
 from enum import Enum
 import math
@@ -331,7 +331,7 @@ class ForceObject:
         edgewise_mass = 1 / len(edges)
         self.edge_masses = [edgewise_mass] * len(edges)
         self.edge_rads = [10] * len(edges)
-        self.base_nodes = self.find_base(tolerance=0.01)
+        self.base_nodes = self.find_base(tolerance=0.4)
         print(f"Force Object Initialised: {len(self.verts)} Verts, {len(self.edges)} Edges")
 
     def __repr__(self) -> str:
@@ -538,7 +538,7 @@ class ForceObject:
         spring_constant = 10000
         density, E, G, Iy, Iz, J, A = mat.as_tup()
         for i, node in enumerate(self.verts):
-            final_finite.add_node(str(i), node.loc[0], node.loc[1], node.loc[2])
+            final_finite.add_node(str(i), node.loc.x, node.loc.y, node.loc.z)
             if i not in self.base_nodes:
                 final_finite.def_support(str(i), support_DZ=True)
         for j, (edge, rad) in enumerate(zip(self.edges, self.edge_rads)):
@@ -561,10 +561,10 @@ class ForceObject:
             # Adds springs to the base nodes
             vert_literal = self.verts[base_node]
             spring_node_name = f"{l}s"
-            final_finite.add_node(spring_node_name, vert_literal.loc[0], vert_literal.loc[1], vert_literal.loc[2] - 1)
+            final_finite.add_node(spring_node_name, vert_literal.loc.x, vert_literal.loc.y, vert_literal.loc.z - 1)
             # Adds node from which spring can be linked to corresponding base node
 
-            final_finite.add_spring(f"Spring{l}", str(l), spring_node_name,
+            final_finite.add_spring(f"Spring{l}", str(base_node), spring_node_name,
                                     spring_constant, tension_only=use_tension,
                                     comp_only=use_compression)
 
@@ -582,7 +582,7 @@ class ForceObject:
             # Alternates compression only and tension only springs to avoid model instability
 
             #Adds supports to the base nodes
-            final_finite.def_support(str(l), support_DX=True, support_DZ=True, support_RY=True)
+            final_finite.def_support(str(base_node), support_DX=True, support_DZ=True, support_RY=True)
         return final_finite
 
     def get_net_moment(self) -> VectorType:
