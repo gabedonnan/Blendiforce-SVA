@@ -1,3 +1,5 @@
+from __future__ import Annotations
+
 from enum import Enum
 import math
 import random
@@ -13,11 +15,13 @@ except ModuleNotFoundError:
 
 try:
     import dill
+
     USE_DILL = True
     USE_PICKLE = False
 except ModuleNotFoundError:
     try:
         import pickle
+
         USE_PICKLE = True
         USE_DILL = False
         print("WARNING: Module 'dill' not found. Using 'pickle' instead.")
@@ -28,6 +32,7 @@ except ModuleNotFoundError:
 
 try:
     import asyncio
+
     USE_ASYNC = True
 except ModuleNotFoundError:
     USE_ASYNC = False
@@ -36,6 +41,7 @@ except ModuleNotFoundError:
 try:
     from PyNite.Visualization import Renderer
     from PyNite.FEModel3D import FEModel3D
+
     USE_PYNITE = True
 except ModuleNotFoundError:
     USE_PYNITE = False
@@ -259,7 +265,7 @@ class Material:
         self.J = state["J"]
         self.A = state["A"]
 
-    def as_tup(self) -> tuple[float]:
+    def as_tup(self) -> tuple[float, float, float, float, float, float, float]:
         return self.density, self.E, self.G, self.Iy, self.Iz, self.J, self.A
 
     def recalc_radius(self, rad: float = 0.01) -> None:
@@ -269,13 +275,14 @@ class Material:
         self.A = math.pi * (rad ** 2)
 
     @staticmethod
-    def return_recalc_radius(rad: float) -> tuple[float,float,float,float]:
+    def return_recalc_radius(rad: float) -> tuple[float, float, float, float]:
         """
         :param rad: radius of object formed with material
         :return: (Iy, Iz, J, A)
         """
         return (math.pi * (rad ** 4)) / 4, (math.pi * (rad ** 4)) / 2, \
-            (math.pi * ((2 * rad) ** 4)) / 32, math.pi * (rad ** 2)
+               (math.pi * ((2 * rad) ** 4)) / 32, math.pi * (rad ** 2)
+
 
 class MaterialEnum(Enum):
     """
@@ -374,19 +381,19 @@ class ForceObject:
             self.verts[vert_nums[0]].dir += gravitational_force
             self.verts[vert_nums[1]].dir += gravitational_force
 
-    def find_base(self, tolerance: float = 0) -> list[int]:
+    def find_base(self, tolerance: float = 0) -> set[int]:
         """ Finds nodes which the ForceObject would rest on if placed vertically downwards
         :param tolerance:
         :return:
         """
         min_height: float = math.inf
-        base_nodes = []
+        base_nodes = set()
         for i, vert in enumerate(self.verts):
             if vert.loc.z + tolerance < min_height:
                 min_height = vert.loc.z
-                base_nodes = [i]
+                base_nodes = {i}
             elif vert.loc.z - tolerance <= min_height <= vert.loc.z + tolerance:
-                base_nodes.append(i)
+                base_nodes.add(i)
         return base_nodes
 
     # Creates n links from each vertex in object 1 to vertices in object two
@@ -402,7 +409,7 @@ class ForceObject:
         # Shifts the indices of object two by the length of object one
         # This is done such that the index of mesh two's first vertex is n+1 for n = length of mesh one
 
-        new_edges = deque([]) # Deque to contain pairs of vertices representing new edges to be made
+        new_edges = deque([])  # Deque to contain pairs of vertices representing new edges to be made
         # Deque used here as the only way new_edges will be modified is by appending, which is faster for a deque
 
         if num_links < 1:  # Forces a positive amount of links
@@ -411,7 +418,7 @@ class ForceObject:
             # Iterates through each vertex from the first object
 
             min_dist = [math.inf] * num_links  # Creates a list to carry currently found smallest distances
-            temp_closest_nums = deque([None] * num_links) # Creates a deque to carry indices of found closest vertices
+            temp_closest_nums = deque([None] * num_links)  # Creates a deque to carry indices of found closest vertices
             # The deque data structure is used here as it is optimised for adding and removing left and rightmost vals
 
             for j, vert2 in enumerate(other_extracted):
@@ -435,7 +442,7 @@ class ForceObject:
                 # This will only fail if len(other_extracted) < num_links
                 for vtc in temp_closest_nums:
                     # Iterates through the closest vertices that have been found for current vertex
-                    new_edges.append([i, vtc]) # Adds an edge from node i to node vtc
+                    new_edges.append([i, vtc])  # Adds an edge from node i to node vtc
             else:
                 print("WARNING: ForceObject.mesh_link failed, meshes will not be linked")
                 return
@@ -456,7 +463,7 @@ class ForceObject:
         :return: None
         """
         MAX_DIST = math.inf  # Very large constant
-        extracted = [self.verts] # List containing lists of each object's vertices
+        extracted = [self.verts]  # List containing lists of each object's vertices
 
         shifts = [0, len(extracted[0])]
         # List to shift the indices of all objects by the length of all objects that come before
@@ -532,6 +539,8 @@ class ForceObject:
         density, E, G, Iy, Iz, J, A = mat.as_tup()
         for i, node in enumerate(self.verts):
             final_finite.add_node(str(i), node.loc[0], node.loc[1], node.loc[2])
+            if i not in self.base_nodes:
+                final_finite.def_support(str(i), support_DZ=True)
         for j, (edge, rad) in enumerate(zip(self.edges, self.edge_rads)):
             Iy, Iz, J, A = mat.return_recalc_radius(rad)
             final_finite.add_member(f"Edge{j}", str(edge[0]), str(edge[1]), E, G, Iy, Iz, J, A)
@@ -546,16 +555,34 @@ class ForceObject:
         use_tension = True
         use_compression = False
 
+        # self.base_nodes is a list of indices of vertices within self.verts
+        # where the nodes comprise the base of the object
         for l, base_node in enumerate(self.base_nodes):
+            # Adds springs to the base nodes
             vert_literal = self.verts[base_node]
-            final_finite.add_node(f"{l}s", vert_literal.loc[0], vert_literal.loc[1], vert_literal.loc[2] - 1)
+            spring_node_name = f"{l}s"
+            final_finite.add_node(spring_node_name, vert_literal.loc[0], vert_literal.loc[1], vert_literal.loc[2] - 1)
             # Adds node from which spring can be linked to corresponding base node
 
-            final_finite.add_spring(f"Spring{l}", str(l), f"{l}s",
+            final_finite.add_spring(f"Spring{l}", str(l), spring_node_name,
                                     spring_constant, tension_only=use_tension,
                                     comp_only=use_compression)
+
+            final_finite.def_support(
+                spring_node_name,
+                support_DX=True,
+                support_DY=True,
+                support_DZ=True,
+                support_RX=True,
+                support_RY=True,
+                support_RZ=True
+            )  # Supports spring base node in all directions
+
             use_tension, use_compression = not use_tension, not use_compression
             # Alternates compression only and tension only springs to avoid model instability
+
+            #Adds supports to the base nodes
+            final_finite.def_support(str(l), support_DX=True, support_DZ=True, support_RY=True)
         return final_finite
 
     def get_net_moment(self) -> VectorType:
@@ -652,6 +679,7 @@ class ForceObjectUniformRad(ForceObject):
 
         # Overall mass is sum of calculated edge masses
         self.mass = sum(self.edge_masses)
+
 
 class ForceVertex:
     def __init__(self, loc: VectorType, direction: VectorType) -> None:
@@ -842,7 +870,7 @@ def create_new_shader(material_name: str, rgb: tuple[float]) -> object:
 
 # Creates a force object simply using raw vertex and edge data
 def force_obj_from_raw_mass(obj: str | object, mass: float,
-                       obj_material: MaterialType = MaterialEnum.STEEL.value) -> ForceObjType:
+                            obj_material: MaterialType = MaterialEnum.STEEL.value) -> ForceObjType:
     """ Creates a ForceObject from raw blender object data
     :param obj: Blender object or String [Object Name]
     :param mass: Enforced mass of entire object
@@ -871,9 +899,10 @@ def force_obj_from_raw_mass(obj: str | object, mass: float,
     final.apply_gravity()
     return final
 
+
 # Creates a force object simply using raw vertex and edge data
 def force_obj_from_raw_rad(obj: str | object, radius: float,
-                       obj_material: MaterialType = MaterialEnum.STEEL.value) -> ForceObjType:
+                           obj_material: MaterialType = MaterialEnum.STEEL.value) -> ForceObjType:
     """ Creates a ForceObject from raw blender object data
     :param obj: Blender object or String [Object Name]
     :param radius: Enforced radius for each edge's cylinder representation
@@ -901,6 +930,7 @@ def force_obj_from_raw_rad(obj: str | object, radius: float,
     final = ForceObjectUniformRad(global_verts, global_edges, obj_material.density, radius)
     final.apply_gravity()
     return final
+
 
 def save_obj(obj: object, file_name: str) -> None:
     """
@@ -993,6 +1023,8 @@ def render_finite(model: FEModel3D, deform: bool = False, save_path: str = "") -
                 print(f"Object could not be saved due to: PermissionError on filepath {save_path}")
             except FileNotFoundError:
                 print(f"Object could not be saved due to: FileNotFoundError on filepath {save_path}")
+        else:
+            print("Object could not be saved due to: Neither Pickle nor Dill could be found")
 
     # Creates Renderer object which takes in analyzed FEM Model
     finite_renderer = Renderer(model)
