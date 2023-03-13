@@ -15,13 +15,11 @@ except ModuleNotFoundError:
 
 try:
     import dill
-
     USE_DILL = True
     USE_PICKLE = False
 except ModuleNotFoundError:
     try:
         import pickle
-
         USE_PICKLE = True
         USE_DILL = False
         print("WARNING: Module 'dill' not found. Using 'pickle' instead.")
@@ -32,7 +30,6 @@ except ModuleNotFoundError:
 
 try:
     import asyncio
-
     USE_ASYNC = True
 except ModuleNotFoundError:
     USE_ASYNC = False
@@ -41,7 +38,6 @@ except ModuleNotFoundError:
 try:
     from PyNite.Visualization import Renderer
     from PyNite.FEModel3D import FEModel3D
-
     USE_PYNITE = True
 except ModuleNotFoundError:
     USE_PYNITE = False
@@ -940,11 +936,25 @@ def save_obj(obj: object, file_name: str) -> None:
     :return: None
     """
     if ".pkl" not in file_name:
-        with open(f"{file_name}.pkl", "wb") as f:
-            dill.dump(obj, f)
+        try:
+            with open(f"{file_name}.pkl", "wb") as f:
+                dill.dump(obj, f)
+        except PermissionError:
+            print(f"Could not open file {file_name}.pkl due to: PermissionError")
+        except FileNotFoundError:
+            print(f"Could not open {file_name}.pkl due to: FileNotFoundError")
+        except NameError:
+            print(f"Could not open {file_name}.pkl due to: NameError, dill not installed")
     else:
-        with open(file_name, "wb") as f:
-            dill.dump(obj, f)
+        try:
+            with open(file_name, "wb") as f:
+                dill.dump(obj, f)
+        except PermissionError:
+            print(f"Could not open file {file_name} due to: PermissionError")
+        except FileNotFoundError:
+            print(f"Could not open {file_name} due to: FileNotFoundError")
+        except NameError:
+            print(f"Could not open {file_name} due to: NameError, dill not installed")
 
 
 def save_obj_pickle(obj: object, file_name: str) -> None:
@@ -956,11 +966,25 @@ def save_obj_pickle(obj: object, file_name: str) -> None:
     :return: None
     """
     if ".pkl" not in file_name:
-        with open(f"{file_name}.pkl", "wb") as f:
-            pickle.dump(obj, f)
+        try:
+            with open(f"{file_name}.pkl", "wb") as f:
+                pickle.dump(obj, f)
+        except PermissionError:
+            print(f"Could not open file {file_name}.pkl due to: PermissionError")
+        except FileNotFoundError:
+            print(f"Could not open {file_name}.pkl due to: FileNotFoundError")
+        except NameError:
+            print(f"Could not open {file_name}.pkl due to: NameError, pickle not installed")
     else:
-        with open(file_name, "wb") as f:
-            pickle.dump(obj, f)
+        try:
+            with open(file_name, "wb") as f:
+                pickle.dump(obj, f)
+        except PermissionError:
+            print(f"Could not open file {file_name} due to: PermissionError")
+        except FileNotFoundError:
+            print(f"Could not open {file_name} due to: FileNotFoundError")
+        except NameError:
+            print(f"Could not open {file_name} due to: NameError, pickle not installed")
 
 
 def load_obj(file_name: str) -> object:
@@ -970,11 +994,31 @@ def load_obj(file_name: str) -> object:
     :return: Unpickled object
     """
     if ".pkl" not in file_name:
-        with open(f"{file_name}.pkl", "rb") as f:
-            final = dill.load(f)
+        try:
+            with open(f"{file_name}.pkl", "rb") as f:
+                final = dill.load(f)
+        except PermissionError:
+            print(f"Could not open file {file_name}.pkl due to: PermissionError")
+            return None
+        except FileNotFoundError:
+            print(f"Could not open {file_name}.pkl due to: FileNotFoundError")
+            return None
+        except NameError:
+            print(f"Could not open {file_name}.pkl due to: NameError, dill not installed")
+            return None
     else:
-        with open(file_name, "rb") as f:
-            final = dill.load(f)
+        try:
+            with open(file_name, "rb") as f:
+                final = dill.load(f)
+        except PermissionError:
+            print(f"Could not open file {file_name} due to: PermissionError")
+            return None
+        except FileNotFoundError:
+            print(f"Could not open {file_name} due to: FileNotFoundError")
+            return None
+        except NameError:
+            print(f"Could not open {file_name} due to: NameError, dill not installed")
+            return None
     return final
 
 
@@ -986,11 +1030,31 @@ def load_obj_pickle(file_name: str) -> object:
     :return: Unpickled object
     """
     if ".pkl" not in file_name:
-        with open(f"{file_name}.pkl", "rb") as f:
-            final = pickle.load(f)
+        try:
+            with open(f"{file_name}.pkl", "rb") as f:
+                final = pickle.load(f)
+        except PermissionError:
+            print(f"Could not open file {file_name}.pkl due to: PermissionError")
+            return None
+        except FileNotFoundError:
+            print(f"Could not open {file_name}.pkl due to: FileNotFoundError")
+            return None
+        except NameError:
+            print(f"Could not open {file_name}.pkl due to: NameError, pickle not installed")
+            return None
     else:
-        with open(file_name, "rb") as f:
-            final = pickle.load(f)
+        try:
+            with open(file_name, "rb") as f:
+                final = pickle.load(f)
+        except PermissionError:
+            print(f"Could not open file {file_name} due to: PermissionError")
+            return None
+        except FileNotFoundError:
+            print(f"Could not open {file_name} due to: FileNotFoundError")
+            return None
+        except NameError:
+            print(f"Could not open {file_name} due to: NameError, pickle not installed")
+            return None
     return final
 
 
