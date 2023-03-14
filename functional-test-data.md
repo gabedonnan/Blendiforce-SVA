@@ -47,3 +47,14 @@ Material Mass m = 100kg
 Spring Constant K = 30 N/m
 
 Large rotational displacement due to the imbalanced system and low spring constant on base
+
+## Displacement of model under uniform load with springs and base node support + y directional rotation and displacement lock: 5
+![Model and its displacement under uniform load](https://cdn.discordapp.com/attachments/553961513686269975/1085211678368596018/image.png)
+
+Material M = POLYETHYLENE
+
+Material Mass m = 100kg
+
+Spring Constant K = 10000 N/m
+
+Large displacement due to gravitational force on such a weak material
