@@ -58,3 +58,14 @@ Material Mass m = 100kg
 Spring Constant K = 10000 N/m
 
 Large displacement due to gravitational force on such a weak material
+
+## Displacement of model under uniform load with springs and base node support + y directional rotation and displacement lock: 6
+![Model and it's displacement under uniform load](https://cdn.discordapp.com/attachments/553961513686269975/1085222400221786194/image.png)
+
+Material M = STEEL
+
+Material Mass m = 100kg
+
+Spring Constant K = 10000 N/m
+
+Sagging and some displacement due to huge mass on weak spring (Previous iterations did not properly utilise spring supports)
