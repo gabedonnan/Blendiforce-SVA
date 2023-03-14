@@ -584,6 +584,7 @@ class ForceObject:
 
             #Adds supports to the base nodes
             final_finite.def_support(str(base_node), support_DX=True, support_DZ=True, support_RY=True)
+
         return final_finite
 
     def get_net_moment(self) -> VectorType:
@@ -1172,12 +1173,17 @@ def unify_to_fobject() -> ForceObjType:
     """
     bpy_objects = [obj for obj in bpy.data.objects if obj.type == "MESH"]
     force_objects = [force_obj_from_raw_mass(ob, 100) for ob in bpy_objects]
-    force_objects[0].mesh_link_chain(force_objects[1:])
-    bpy.ops.object.select_all(action="SELECT")
-    bpy.ops.object.delete()
-    force_objects[0].to_blend_object().make(fast=True)
-    bpy_object = bpy.data.objects[0]
-    return force_obj_from_raw_mass(bpy_object, 100)
+    if len(force_objects) > 1:
+        force_objects[0].mesh_link_chain(force_objects[1:])
+        bpy.ops.object.select_all(action="SELECT")
+        bpy.ops.object.delete()
+        force_objects[0].to_blend_object().make(fast=True)
+        bpy_object = bpy.data.objects[0]
+        return force_obj_from_raw_mass(bpy_object, 100)
+    elif len(force_objects) == 1:
+        return force_objects[0]
+    else:
+        raise IndexError("IndexError: force_objects has zero length, please add objects to the blender scene")
 
 
 if __name__ == "__main__":
