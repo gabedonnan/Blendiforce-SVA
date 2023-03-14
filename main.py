@@ -520,7 +520,7 @@ class ForceObject:
             # This operation shifts each edge value to point to the correct verts in the new combined object
 
     # Creates a finite element model from a mesh
-    def to_finite(self, mat: MaterialType, lock_dict: dict) -> FEModel3D:  # Redo return typing
+    def to_finite(self, mat: MaterialType, lock_dict: dict, spring_constant: float) -> FEModel3D:  # Redo return typing
         """ Compiles ForceObject to FEA model via the following steps:
          - Loads in each node from the ForceObject
          - Adds each edge from the ForceObject
@@ -528,10 +528,11 @@ class ForceObject:
          - Adds spring supports
          - Adds standard supports
         :param mat: Material Object: Self defined material object, not blender material
+        :param lock_dict: Dictionary containing directional lock parameters for each normal node
+        :param spring_constant: Spring constant of supporting base springs
         :return: FEModel3D Object
         """
         final_finite = FEModel3D()
-        spring_constant = 10000
         density, E, G, Iy, Iz, J, A = mat.as_tup()
         for i, node in enumerate(self.verts):
             final_finite.add_node(str(i), node.loc.x, node.loc.y, node.loc.z)
@@ -586,7 +587,7 @@ class ForceObject:
             # Alternates compression only and tension only springs to avoid model instability
 
             #Adds supports to the base nodes
-            final_finite.def_support(str(base_node), support_DX=True, support_DZ=True, support_RY=True)
+            final_finite.def_support(str(base_node), support_DX=True, support_DY=True, support_RZ=True)
 
         return final_finite
 
@@ -1239,6 +1240,6 @@ if __name__ == "__main__":
     # If USE_PYNITE is false, the newly linked mesh is still rendered to the scene
     if USE_PYNITE:
         default_lock_dict = vert_locks("DYRY")  # Get user input for this
-        force_finite = force_object_final.to_finite(MaterialEnum.STEEL.value, default_lock_dict)
+        force_finite = force_object_final.to_finite(MaterialEnum.STEEL.value, default_lock_dict, 1e6)
         bpy.ops.wm.save_mainfile()  # Saves the file before rendering via PyNite visualiser
         render_finite(force_finite, deform=True, save_path="C:\\Users\\Gabriel\\Documents\\finite_mesh.pkl")
