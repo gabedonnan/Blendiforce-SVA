@@ -69,3 +69,7 @@ Material Mass m = 100kg
 Spring Constant K = 10000 N/m
 
 Sagging and some displacement due to huge mass on weak spring (Previous iterations did not properly utilise spring supports)
+
+### Same as previous but with K = 100000
+
+![Model and it's displacement under uniform load](https://cdn.discordapp.com/attachments/553961513686269975/1085225723310129192/image.png)
