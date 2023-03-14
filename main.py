@@ -520,7 +520,7 @@ class ForceObject:
             # This operation shifts each edge value to point to the correct verts in the new combined object
 
     # Creates a finite element model from a mesh
-    def to_finite(self, mat: MaterialType) -> FEModel3D:  # Redo return typing
+    def to_finite(self, mat: MaterialType, lock_dict: dict) -> FEModel3D:  # Redo return typing
         """ Compiles ForceObject to FEA model via the following steps:
          - Loads in each node from the ForceObject
          - Adds each edge from the ForceObject
@@ -538,9 +538,12 @@ class ForceObject:
             if i not in self.base_nodes:
                 final_finite.def_support(
                     str(i),
-                    support_RX=True,
-                    support_RY=True,
-                    support_RZ=True
+                    support_DX=lock_dict["DX"],
+                    support_DY=lock_dict["DY"],
+                    support_DZ=lock_dict["DZ"],
+                    support_RX=lock_dict["RX"],
+                    support_RY=lock_dict["RY"],
+                    support_RZ=lock_dict["RZ"]
                 )
         for j, (edge, rad) in enumerate(zip(self.edges, self.edge_rads)):
             Iy, Iz, J, A = mat.return_recalc_radius(rad)
@@ -812,6 +815,11 @@ class BlendObject:
         bpy.context.object.rotation_euler[0] = theta_rotation
         bpy.context.object.rotation_euler[2] = phi_rotation
         bpy.context.object.data.materials.append(random.choice(self.materials))
+
+
+"""
+Classless functions below, possibly aggregate them into a single class Ops at a later date
+"""
 
 
 # Utility function adding a value to a queue style iterable, maintaining sorting from smallest to largest
@@ -1186,9 +1194,51 @@ def unify_to_fobject() -> ForceObjType:
         raise IndexError("IndexError: force_objects has zero length, please add objects to the blender scene")
 
 
+def vert_locks(key: str = "NONE") -> dict:
+    """
+    Gets the dictionary of booleans representing vertex locks for certain combinations of directions
+    Vertex locks are a PyNite feature which defines the directions in which vertices cannot move or rotate
+    These are important because they counteract model instability
+    This is designed for interfacing with a UI
+    :param key: String containing the vertex degrees of freedom to lock
+    :return: dictionary of booleans defining whether that particular degree of freedom is locked
+    """
+    key = key.upper()
+
+    if key in ["ALL", "ALL_LOCKS", "A"]:
+        # Locks all degrees of freedom
+        return {"DX": True, "DY": True, "DZ": True, "RX": True, "RY": True, "RZ": True}
+    elif key in ["POS", "ALL_POSITION", "POSITION", "P"]:
+        # Locks all translational but no rotational degrees of freedom
+        return {"DX": True, "DY": True, "DZ": True, "RX": False, "RY": False, "RZ": False}
+    elif key in ["ROT", "ALL_ROTATION", "ROTATION", "R"]:
+        # Locks all rotational but no translational degrees of freedom
+        return {"DX": False, "DY": False, "DZ": False, "RX": True, "RY": True, "RZ": True}
+    elif key in ["NONE", "N", ""]:
+        # Locks no degrees of freedom
+        return {"DX": False, "DY": False, "DZ": False, "RX": False, "RY": False, "RZ": False}
+
+    final = {"DX": False, "DY": False, "DZ": False, "RX": False, "RY": False, "RZ": False}
+    if "DX" in key:
+        final["DX"] = True
+    if "DY" in key:
+        final["DY"] = True
+    if "DZ" in key:
+        final["DZ"] = True
+    if "RX" in key:
+        final["RX"] = True
+    if "RY" in key:
+        final["RY"] = True
+    if "RZ" in key:
+        final["RZ"] = True
+    return final
+
+
 if __name__ == "__main__":
     force_object_final = unify_to_fobject()
     # If USE_PYNITE is false, the newly linked mesh is still rendered to the scene
     if USE_PYNITE:
-        force_finite = force_object_final.to_finite(MaterialEnum.STEEL.value)
+        default_lock_dict = vert_locks("DYRY")  # Get user input for this
+        force_finite = force_object_final.to_finite(MaterialEnum.STEEL.value, default_lock_dict)
+        bpy.ops.wm.save_mainfile()  # Saves the file before rendering via PyNite visualiser
         render_finite(force_finite, deform=True, save_path="C:\\Users\\Gabriel\\Documents\\finite_mesh.pkl")
