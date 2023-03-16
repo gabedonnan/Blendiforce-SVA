@@ -29,13 +29,6 @@ except ModuleNotFoundError:
         print("WARNING: Modules 'dill' and 'pickle' not found. Saving capability will be disabled.")
 
 try:
-    import asyncio
-    USE_ASYNC = True
-except ModuleNotFoundError:
-    USE_ASYNC = False
-    print("WARNING: Module 'asyncio' not found. Async capability will be disabled.")
-
-try:
     from PyNite.Visualization import Renderer
     from PyNite.FEModel3D import FEModel3D
     USE_PYNITE = True
