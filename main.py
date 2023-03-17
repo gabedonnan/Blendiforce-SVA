@@ -8,6 +8,14 @@ import numpy as np
 from typing import TypeVar, Any
 
 try:
+    import threading
+    USE_THREADING = True
+except ModuleNotFoundError:
+    USE_THREADING = False
+    print("WARNING: Module 'threading' not found.",
+          "The program will still run but Blender will crash upon exiting the GUI")
+
+try:
     import bpy
     import bmesh
 except ModuleNotFoundError:
@@ -303,6 +311,44 @@ class MaterialEnum(Enum):
     # Plastic material from: https://www.matweb.com/search/datasheet_print.aspx?matguid=e19bc7065d1c4836a89d41ff23d47413
     PVC = Material("PLASTIC_PVC", 1300, 1.7e9, 6.35e7)
 
+    # Glass material from: https://www.structuralglass.org/single-post/2016/11/26/glass-physical-properties
+    # The model cannot account for the drastic difference in tensile and compressive strength for glass
+    # As such glass simulation will be unrealistic for tension, but correct for compression
+    GLASS = Material("GLASS", 2500, 7e10, 2.8e9)
+
+    # Copper material from:http://www.mit.edu/~6.777/matprops/copper.htm
+    # and https://www.azom.com/properties.aspx?ArticleID=597
+    COPPER = Material("COPPER", 8960, 1.84e10, 6.74e9)
+
+    # Aluminium material from: https://www.britannica.com/science/shear-modulus
+    # and https://www.mit.edu/~6.777/matprops/aluminum.htm
+    ALUMINIUM = Material("ALUMINIUM", 2700, 7e10, 2.4e10)
+
+    # Brass material from: https://www.matweb.com/search/datasheet_print.aspx?matguid=d3bd4617903543ada92f4c101c2a20e5
+    BRASS = Material("BRASS", 8890, 9.84e10, 3.55e10)
+
+    # Lightweight concrete
+    # Concrete material from: https://civiltoday.com/civil-engineering-materials/concrete/361-density-of-concrete
+    # https://www.fhwa.dot.gov/publications/research/infrastructure/pavements/05062/chapt2c.cfm
+    CONCRETE_LIGHT = Material("CONCRETE_LIGHT", 2000, 2.3e10, 1e10)
+
+    # Dense concrete
+    # Concrete material from: https://www.fhwa.dot.gov/publications/research/infrastructure/pavements/05062/chapt2c.cfm
+    CONCRETE_DENSE = Material("CONCRETE_DENSE", 2400, 3.28e10, 1.43e10)
+
+    # C90/105 Reinforced concrete
+    # This concrete material will act more accurately than the other two 
+    # as it's compressive and tensile strengths are more similar than regular concrete
+    # where tensile is lower than compressive normally
+    # Concrete material from: https://eurocodeapplied.com/design/en1992/concrete-design-properties
+    CONCRETE_REINFORCED = Material("CONCRETE_REINFORCED", 2400, 4.36e10, 1.82e10)
+
+    
+
+
+
+
+
 
 # Object populated with edges
 class ForceObject:
@@ -311,7 +357,7 @@ class ForceObject:
         """
         :param verts: List[ForceVertex]
         :param edges: List[List[Int]] : Inner list of len 2
-        :param mass: float : kilograms
+        :param density: float : kilograms / m^2
         """
         self.verts = verts
         self.edges = edges
@@ -1165,23 +1211,60 @@ def render_finite_from_file(file_path: str, deform: bool = False) -> None:
         print("Object not loaded properly, possibly empty")
 
 
-def unify_to_fobject() -> ForceObjType:
+def unify_to_fobject_mass(mass: float) -> ForceObjType:
     """
     Takes all objects in the scene, links them together, forms them into a blender mesh
     Then all other objects are deleted and the blender mesh is loaded into the scene
     This blender mesh is then re-loaded into a ForceObject to be analysed
     A little inefficient and roundabout however it is the simplest way to fix mesh instability
+    :arg mass: mass of the force object result
     :return: ForceObject representation of linked scene meshes
     """
+
+    if mass == 0:
+        print("WARNING: Objects cannot have 0 mass, automatically adjusting to a mass of 1 kilogram")
+        mass = 1
+
     bpy_objects = [obj for obj in bpy.data.objects if obj.type == "MESH"]
-    force_objects = [force_obj_from_raw_mass(ob, 100) for ob in bpy_objects]
+    force_objects = [force_obj_from_raw_mass(ob, mass) for ob in bpy_objects]
+
     if len(force_objects) > 1:
         force_objects[0].mesh_link_chain(force_objects[1:])
         bpy.ops.object.select_all(action="SELECT")
         bpy.ops.object.delete()
         force_objects[0].to_blend_object().make(fast=True)
         bpy_object = bpy.data.objects[0]
-        return force_obj_from_raw_mass(bpy_object, 100)
+        return force_obj_from_raw_mass(bpy_object, mass)
+    elif len(force_objects) == 1:
+        return force_objects[0]
+    else:
+        raise IndexError("IndexError: force_objects has zero length, please add objects to the blender scene")
+
+
+def unify_to_fobject_rad(radius: float) -> ForceObjType:
+    """
+    Takes all objects in the scene, links them together, forms them into a blender mesh
+    Then all other objects are deleted and the blender mesh is loaded into the scene
+    This blender mesh is then re-loaded into a ForceObject to be analysed
+    A little inefficient and roundabout however it is the simplest way to fix mesh instability
+    :arg radius: radius of the finite elements of the object
+    :return: ForceObject representation of linked scene meshes
+    """
+
+    if radius == 0:
+        print("WARNING: An object cannot have element radius of 0, automatically adjusting to 1 meter")
+        radius = 1
+
+    bpy_objects = [obj for obj in bpy.data.objects if obj.type == "MESH"]
+    force_objects = [force_obj_from_raw_rad(ob, radius) for ob in bpy_objects]
+
+    if len(force_objects) > 1:
+        force_objects[0].mesh_link_chain(force_objects[1:])
+        bpy.ops.object.select_all(action="SELECT")
+        bpy.ops.object.delete()
+        force_objects[0].to_blend_object().make(fast=True)
+        bpy_object = bpy.data.objects[0]
+        return force_obj_from_raw_rad(bpy_object, radius)
     elif len(force_objects) == 1:
         return force_objects[0]
     else:
@@ -1229,10 +1312,15 @@ def vert_locks(key: str = "NONE") -> dict:
 
 
 if __name__ == "__main__":
-    force_object_final = unify_to_fobject()
+    force_object_final = unify_to_fobject_mass(0.1)
     # If USE_PYNITE is false, the newly linked mesh is still rendered to the scene
     if USE_PYNITE:
-        default_lock_dict = vert_locks("DYRY")  # Get user input for this
+        default_lock_dict = vert_locks("DYRX")  # Get user input for this
         force_finite = force_object_final.to_finite(MaterialEnum.STEEL.value, default_lock_dict, 1e6)
         bpy.ops.wm.save_mainfile()  # Saves the file before rendering via PyNite visualiser
-        render_finite(force_finite, deform=True, save_path="C:\\Users\\Gabriel\\Documents\\finite_mesh.pkl")
+        if USE_THREADING:
+            render_thread = threading.Thread(target=render_finite, args=(force_finite, True))
+            render_thread.start()
+            render_thread.join()
+        else:
+            render_finite(force_finite, deform=True, save_path="C:\\Users\\Gabriel\\Documents\\finite_mesh.pkl")
