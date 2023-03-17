@@ -1149,6 +1149,7 @@ def render_finite(model: FEModel3D, deform: bool = False, save_path: str = "") -
     finite_renderer.deformed_shape = deform
     finite_renderer.labels = False
     finite_renderer.scalar_bar = True
+    finite_renderer.render_loads = False
     finite_renderer.scalar_bar_text_size = 10
 
     # Renders the model. This creates a new window that will lock Blender as a program in order to
@@ -1309,12 +1310,17 @@ if __name__ == "__main__":
     force_object_final = unify_to_fobject_mass(0.1)
     # If USE_PYNITE is false, the newly linked mesh is still rendered to the scene
     if USE_PYNITE:
-        default_lock_dict = vert_locks("DYRX")  # Get user input for this
+        default_lock_dict = vert_locks(key="NONE")  # Get user input for this
         force_finite = force_object_final.to_finite(MaterialEnum.STEEL.value, default_lock_dict, 1e6)
         bpy.ops.wm.save_mainfile()  # Saves the file before rendering via PyNite visualiser
         if USE_THREADING:
+            # Opens the render window in a new thread 
+            # This means that the original process does not crash upon the window closing
             render_thread = threading.Thread(target=render_finite, args=(force_finite, True))
             render_thread.start()
             render_thread.join()
         else:
+            # Blender will crash upon window exiting due to an un-handleable error
+            # Can only be fixed by using the multithreaded option
+            # The error originates from the interaction of vtk and Blender
             render_finite(force_finite, deform=True, save_path="C:\\Users\\Gabriel\\Documents\\finite_mesh.pkl")
