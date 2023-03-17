@@ -337,17 +337,11 @@ class MaterialEnum(Enum):
     CONCRETE_DENSE = Material("CONCRETE_DENSE", 2400, 3.28e10, 1.43e10)
 
     # C90/105 Reinforced concrete
-    # This concrete material will act more accurately than the other two 
+    # This concrete material will act more accurately than the other two
     # as it's compressive and tensile strengths are more similar than regular concrete
     # where tensile is lower than compressive normally
     # Concrete material from: https://eurocodeapplied.com/design/en1992/concrete-design-properties
     CONCRETE_REINFORCED = Material("CONCRETE_REINFORCED", 2400, 4.36e10, 1.82e10)
-
-    
-
-
-
-
 
 
 # Object populated with edges
