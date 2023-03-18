@@ -879,17 +879,53 @@ class MainWindow(QMainWindow):
         # ____________________________________
 
         # Display axial lock checkboxes _____
-        self.lock_combo = [False, False, False, False, False, False]
+        self.lock_combo = {"DX": False, "DY": False, "DZ": False, "RX": False, "RY": False, "RZ": False}
+        lock_layout = QVBoxLayout()
         # DX checkbox and text
-        dx_layout = QVBoxLayout()
         dx_checkbox = QCheckBox()
         dx_checkbox.stateChanged.connect(self.dx_set_state)
         dx_text = QLabel("DX")
-        dx_layout.addWidget(dx_checkbox)
-        dx_layout.addWidget(dx_text)
+        lock_layout.addWidget(dx_text)
+        lock_layout.addWidget(dx_checkbox)
+
+        # DY checkbox and text
+        dy_checkbox = QCheckBox()
+        dy_checkbox.stateChanged.connect(self.dy_set_state)
+        dy_text = QLabel("DY")
+        lock_layout.addWidget(dy_text)
+        lock_layout.addWidget(dy_checkbox)
+
+        # DZ checkbox and text
+        dz_checkbox = QCheckBox()
+        dz_checkbox.stateChanged.connect(self.dz_set_state)
+        dz_text = QLabel("DZ")
+        lock_layout.addWidget(dz_text)
+        lock_layout.addWidget(dz_checkbox)
+
+        # RX checkbox and text
+        rx_checkbox = QCheckBox()
+        rx_checkbox.stateChanged.connect(self.rx_set_state)
+        rx_text = QLabel("RX")
+        lock_layout.addWidget(rx_text)
+        lock_layout.addWidget(rx_checkbox)
+
+        # RY checkbox and text
+        ry_checkbox = QCheckBox()
+        ry_checkbox.stateChanged.connect(self.ry_set_state)
+        ry_text = QLabel("RY")
+        lock_layout.addWidget(ry_text)
+        lock_layout.addWidget(ry_checkbox)
+
+        # RZ checkbox and text
+        rz_checkbox = QCheckBox()
+        rz_checkbox.stateChanged.connect(self.rz_set_state)
+        rz_text = QLabel("RZ")
+        lock_layout.addWidget(rz_text)
+        lock_layout.addWidget(rz_checkbox)
+        # ____________________________________
 
         lock_widget = QWidget()
-        lock_widget.setLayout(dx_layout)
+        lock_widget.setLayout(lock_layout)
 
         main_layout.addWidget(lock_widget)
         main_layout.addWidget(material_widget)
@@ -905,22 +941,23 @@ class MainWindow(QMainWindow):
 
     # True is represented as 2 for these functions due to PyQt6 default states
     def dx_set_state(self, state: int) -> None:
-        self.lock_combo[0] = (state == 2)
+        self.lock_combo["DX"] = (state == 2)
+        print(self.lock_combo)
 
     def dy_set_state(self, state: int) -> None:
-        self.lock_combo[1] = (state == 2)
+        self.lock_combo["DY"] = (state == 2)
 
     def dz_set_state(self, state: int) -> None:
-        self.lock_combo[2] = (state == 2)
+        self.lock_combo["DZ"] = (state == 2)
 
     def rx_set_state(self, state: int) -> None:
-        self.lock_combo[3] = (state == 2)
+        self.lock_combo["RX"] = (state == 2)
 
     def ry_set_state(self, state: int) -> None:
-        self.lock_combo[4] = (state == 2)
+        self.lock_combo["RY"] = (state == 2)
 
     def rz_set_state(self, state: int) -> None:
-        self.lock_combo[5] = (state == 2)
+        self.lock_combo["RZ"] = (state == 2)
 
 
 """
