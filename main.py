@@ -7,9 +7,11 @@ from collections import deque
 import numpy as np
 from typing import TypeVar, Any
 import sys
+
+from PyQt6.QtGui import QDoubleValidator
 from PyQt6.QtWidgets import (
     QMainWindow, QApplication,
-    QComboBox, QVBoxLayout, QWidget, QLabel, QCheckBox, QSizePolicy, QRadioButton
+    QComboBox, QVBoxLayout, QWidget, QLabel, QCheckBox, QSizePolicy, QRadioButton, QLineEdit
 )
 from PyQt6.QtCore import Qt
 
@@ -975,6 +977,22 @@ class MainWindow(QMainWindow):
         mass_rad_layout.addWidget(rad_selector)
         # ____________________________________
 
+        # Display mass or rad number field____
+        self.mass_rad_value = 0.1
+        # Add note above edit box
+        mass_rad_editor_title_widget = QLabel("Mass / Radius value (Use scientific floating point notation)")
+        mass_rad_layout.addWidget(mass_rad_editor_title_widget)
+
+        mass_rad_input = QLineEdit()
+        only_double = QDoubleValidator()
+        # Restricts the range between some small number above 0 and 9999
+        only_double.setRange(0.01, 9999)
+        mass_rad_input.setValidator(only_double)
+        mass_rad_input.textChanged.connect(self.set_mass_rad_val)
+        mass_rad_layout.addWidget(mass_rad_input)
+        # ____________________________________
+
+        # Final formatting____________________
         lock_widget = QWidget()
         lock_widget.setLayout(lock_layout)
 
@@ -989,8 +1007,8 @@ class MainWindow(QMainWindow):
 
         main_widget = QWidget()
         main_widget.setLayout(main_layout)
-
         self.setCentralWidget(main_widget)
+        # ____________________________________
 
     def material_changed(self, s: str) -> None:
         self.active_material = self.materials[s]
@@ -1018,6 +1036,11 @@ class MainWindow(QMainWindow):
     def set_mass(self, state: bool) -> None:
         self.use_mass = state
 
+    def set_mass_rad_val(self, value: str) -> None:
+        try:
+            self.mass_rad_value = float(value)
+        except ValueError:
+            print("WARNING: Value is not a float")
 
 
 """
@@ -1447,11 +1470,12 @@ if __name__ == "__main__":
     object_material: MaterialType = menu_window.active_material
     default_lock_dict: dict = menu_window.lock_combo
     use_mass: bool = menu_window.use_mass
+    mass_rad_value: float = menu_window.mass_rad_value
 
     if use_mass:
-        force_object_final: ForceObjType = unify_to_fobject_mass(0.1)
+        force_object_final: ForceObjType = unify_to_fobject_mass(mass_rad_value)
     else:
-        force_object_final: ForceObjType = unify_to_fobject_rad(0.1)
+        force_object_final: ForceObjType = unify_to_fobject_rad(mass_rad_value)
     # If USE_PYNITE is false, the newly linked mesh is still rendered to the scene
     if USE_PYNITE:
         force_finite = force_object_final.to_finite(object_material, default_lock_dict, 1e6)
