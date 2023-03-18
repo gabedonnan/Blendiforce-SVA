@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QApplication,
     QComboBox, QVBoxLayout, QWidget, QLabel, QCheckBox
 )
+from PyQt6.QtCore import Qt
 
 try:
     import threading
@@ -881,45 +882,64 @@ class MainWindow(QMainWindow):
         # Display axial lock checkboxes _____
         self.lock_combo = {"DX": False, "DY": False, "DZ": False, "RX": False, "RY": False, "RZ": False}
         lock_layout = QVBoxLayout()
+
+        # Menu header text for axial locks
+        context_text = QLabel("       Locks for nodal displacement and rotation:       ")
+        context_font = context_text.font()
+        context_font.setPointSize(20)
+        context_text.setFont(context_font)
+        context_text.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        lock_layout.addWidget(context_text)
+
         # DX checkbox and text
         dx_checkbox = QCheckBox()
         dx_checkbox.stateChanged.connect(self.dx_set_state)
-        dx_text = QLabel("DX")
+        dx_text = QLabel("Displacement in the X direction: DX")
+        # Setting of font properties
+        checkbox_label_font = dx_text.font()
+        checkbox_label_font.setPointSize(15)
+        dx_text.setFont(checkbox_label_font)
+        # End font setting
         lock_layout.addWidget(dx_text)
         lock_layout.addWidget(dx_checkbox)
 
         # DY checkbox and text
         dy_checkbox = QCheckBox()
         dy_checkbox.stateChanged.connect(self.dy_set_state)
-        dy_text = QLabel("DY")
+        dy_text = QLabel("Displacement in the Y direction: DY")
+        dy_text.setFont(checkbox_label_font)
         lock_layout.addWidget(dy_text)
         lock_layout.addWidget(dy_checkbox)
 
         # DZ checkbox and text
         dz_checkbox = QCheckBox()
         dz_checkbox.stateChanged.connect(self.dz_set_state)
-        dz_text = QLabel("DZ")
+        dz_text = QLabel("Displacement in the Z direction: DZ")
+        dz_text.setFont(checkbox_label_font)
         lock_layout.addWidget(dz_text)
         lock_layout.addWidget(dz_checkbox)
 
         # RX checkbox and text
         rx_checkbox = QCheckBox()
         rx_checkbox.stateChanged.connect(self.rx_set_state)
-        rx_text = QLabel("RX")
+        rx_text = QLabel("Rotation in the X direction: RX")
+        rx_text.setFont(checkbox_label_font)
         lock_layout.addWidget(rx_text)
         lock_layout.addWidget(rx_checkbox)
 
         # RY checkbox and text
         ry_checkbox = QCheckBox()
         ry_checkbox.stateChanged.connect(self.ry_set_state)
-        ry_text = QLabel("RY")
+        ry_text = QLabel("Rotation in the Y direction: RY")
+        ry_text.setFont(checkbox_label_font)
         lock_layout.addWidget(ry_text)
         lock_layout.addWidget(ry_checkbox)
 
         # RZ checkbox and text
         rz_checkbox = QCheckBox()
         rz_checkbox.stateChanged.connect(self.rz_set_state)
-        rz_text = QLabel("RZ")
+        rz_text = QLabel("Rotation in the Z direction: RZ")
+        rz_text.setFont(checkbox_label_font)
         lock_layout.addWidget(rz_text)
         lock_layout.addWidget(rz_checkbox)
         # ____________________________________
@@ -927,6 +947,13 @@ class MainWindow(QMainWindow):
         lock_widget = QWidget()
         lock_widget.setLayout(lock_layout)
 
+        title_text_widget = QLabel("BlendiForce Menu")
+        font = title_text_widget.font()
+        font.setPointSize(25)
+        title_text_widget.setFont(font)
+        title_text_widget.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+
+        main_layout.addWidget(title_text_widget)
         main_layout.addWidget(lock_widget)
         main_layout.addWidget(material_widget)
 
@@ -942,7 +969,6 @@ class MainWindow(QMainWindow):
     # True is represented as 2 for these functions due to PyQt6 default states
     def dx_set_state(self, state: int) -> None:
         self.lock_combo["DX"] = (state == 2)
-        print(self.lock_combo)
 
     def dy_set_state(self, state: int) -> None:
         self.lock_combo["DY"] = (state == 2)
@@ -1375,46 +1401,6 @@ def unify_to_fobject_rad(radius: float) -> ForceObjType:
         raise IndexError("IndexError: force_objects has zero length, please add objects to the blender scene")
 
 
-def vert_locks(key: str = "NONE") -> dict:
-    """
-    Gets the dictionary of booleans representing vertex locks for certain combinations of directions
-    Vertex locks are a PyNite feature which defines the directions in which vertices cannot move or rotate
-    These are important because they counteract model instability
-    This is designed for interfacing with a UI
-    :param key: String containing the vertex degrees of freedom to lock
-    :return: dictionary of booleans defining whether that particular degree of freedom is locked
-    """
-    key = key.upper()
-
-    if key in ["ALL", "ALL_LOCKS", "A"]:
-        # Locks all degrees of freedom
-        return {"DX": True, "DY": True, "DZ": True, "RX": True, "RY": True, "RZ": True}
-    elif key in ["POS", "ALL_POSITION", "POSITION", "P"]:
-        # Locks all translational but no rotational degrees of freedom
-        return {"DX": True, "DY": True, "DZ": True, "RX": False, "RY": False, "RZ": False}
-    elif key in ["ROT", "ALL_ROTATION", "ROTATION", "R"]:
-        # Locks all rotational but no translational degrees of freedom
-        return {"DX": False, "DY": False, "DZ": False, "RX": True, "RY": True, "RZ": True}
-    elif key in ["NONE", "N", ""]:
-        # Locks no degrees of freedom
-        return {"DX": False, "DY": False, "DZ": False, "RX": False, "RY": False, "RZ": False}
-
-    final = {"DX": False, "DY": False, "DZ": False, "RX": False, "RY": False, "RZ": False}
-    if "DX" in key:
-        final["DX"] = True
-    if "DY" in key:
-        final["DY"] = True
-    if "DZ" in key:
-        final["DZ"] = True
-    if "RX" in key:
-        final["RX"] = True
-    if "RY" in key:
-        final["RY"] = True
-    if "RZ" in key:
-        final["RZ"] = True
-    return final
-
-
 if __name__ == "__main__":
 
     # Menu code
@@ -1423,12 +1409,13 @@ if __name__ == "__main__":
     menu_window.show()
     app.exec()  # Blocking
 
-    object_material = menu_window.active_material
+    # User input applied
+    object_material: MaterialType = menu_window.active_material
+    default_lock_dict: dict = menu_window.lock_combo
 
-    force_object_final = unify_to_fobject_mass(0.1)
+    force_object_final: ForceObjType = unify_to_fobject_mass(0.1)
     # If USE_PYNITE is false, the newly linked mesh is still rendered to the scene
     if USE_PYNITE:
-        default_lock_dict = vert_locks(key="NONE")  # Get user input for this
         force_finite = force_object_final.to_finite(object_material, default_lock_dict, 1e6)
         bpy.ops.wm.save_mainfile()  # Saves the file before rendering via PyNite visualiser
         if USE_THREADING:
