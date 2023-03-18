@@ -9,7 +9,7 @@ from typing import TypeVar, Any
 import sys
 from PyQt6.QtWidgets import (
     QMainWindow, QApplication,
-    QComboBox, QVBoxLayout, QWidget, QLabel, QCheckBox
+    QComboBox, QVBoxLayout, QWidget, QLabel, QCheckBox, QSizePolicy
 )
 from PyQt6.QtCore import Qt
 
@@ -864,6 +864,9 @@ class BlendObject:
 
 
 class MainWindow(QMainWindow):
+    """
+    PyQt6 based class defining a basic menu system
+    """
     def __init__(self):
         super().__init__()
 
@@ -871,12 +874,25 @@ class MainWindow(QMainWindow):
 
         main_layout = QVBoxLayout()
 
-        # Display material dropdown menu _____
-        material_widget = QComboBox()
-        self.materials = {mat.value.name: mat.value for mat in MaterialEnum}
-        self.active_material = [self.materials[mat] for mat in self.materials][0]  # Sussy
-        material_widget.addItems([mat for mat in self.materials])
-        material_widget.currentTextChanged.connect(self.material_changed)
+        # Acts like a CSS stylesheet applying to the whole menu
+        # Here we use it to increase the size of checkbox objects and their corresponding text
+        self.setStyleSheet("""
+            QCheckBox {
+                font-size: 15pt;
+            }
+            
+            QCheckBox::indicator {
+                width: 13px;
+                height: 13px;
+            }
+        """)
+
+        # Display title ______________________
+        title_text_widget = QLabel("BlendiForce Menu")
+        title_font = title_text_widget.font()
+        title_font.setPointSize(25)
+        title_text_widget.setFont(title_font)
+        title_text_widget.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         # ____________________________________
 
         # Display axial lock checkboxes _____
@@ -892,69 +908,63 @@ class MainWindow(QMainWindow):
         lock_layout.addWidget(context_text)
 
         # DX checkbox and text
-        dx_checkbox = QCheckBox()
+        dx_checkbox = QCheckBox("Displacement in the X direction: DX")
         dx_checkbox.stateChanged.connect(self.dx_set_state)
-        dx_text = QLabel("Displacement in the X direction: DX")
-        # Setting of font properties
-        checkbox_label_font = dx_text.font()
-        checkbox_label_font.setPointSize(15)
-        dx_text.setFont(checkbox_label_font)
-        # End font setting
-        lock_layout.addWidget(dx_text)
         lock_layout.addWidget(dx_checkbox)
 
         # DY checkbox and text
-        dy_checkbox = QCheckBox()
+        dy_checkbox = QCheckBox("Displacement in the Y direction: DY")
         dy_checkbox.stateChanged.connect(self.dy_set_state)
-        dy_text = QLabel("Displacement in the Y direction: DY")
-        dy_text.setFont(checkbox_label_font)
-        lock_layout.addWidget(dy_text)
         lock_layout.addWidget(dy_checkbox)
 
         # DZ checkbox and text
-        dz_checkbox = QCheckBox()
+        dz_checkbox = QCheckBox("Displacement in the Z direction: DZ")
         dz_checkbox.stateChanged.connect(self.dz_set_state)
-        dz_text = QLabel("Displacement in the Z direction: DZ")
-        dz_text.setFont(checkbox_label_font)
-        lock_layout.addWidget(dz_text)
         lock_layout.addWidget(dz_checkbox)
 
         # RX checkbox and text
-        rx_checkbox = QCheckBox()
+        rx_checkbox = QCheckBox("Rotation in the X direction: RX")
         rx_checkbox.stateChanged.connect(self.rx_set_state)
-        rx_text = QLabel("Rotation in the X direction: RX")
-        rx_text.setFont(checkbox_label_font)
-        lock_layout.addWidget(rx_text)
         lock_layout.addWidget(rx_checkbox)
 
         # RY checkbox and text
-        ry_checkbox = QCheckBox()
+        ry_checkbox = QCheckBox("Rotation in the Y direction: RY")
         ry_checkbox.stateChanged.connect(self.ry_set_state)
-        ry_text = QLabel("Rotation in the Y direction: RY")
-        ry_text.setFont(checkbox_label_font)
-        lock_layout.addWidget(ry_text)
         lock_layout.addWidget(ry_checkbox)
 
         # RZ checkbox and text
-        rz_checkbox = QCheckBox()
+        rz_checkbox = QCheckBox("Rotation in the Z direction: RZ")
         rz_checkbox.stateChanged.connect(self.rz_set_state)
-        rz_text = QLabel("Rotation in the Z direction: RZ")
-        rz_text.setFont(checkbox_label_font)
-        lock_layout.addWidget(rz_text)
         lock_layout.addWidget(rz_checkbox)
+        # ____________________________________
+
+        # Display material dropdown menu _____
+        material_title_widget = QLabel("Select Object Material:")
+        material_font = material_title_widget.font()
+        material_font.setPointSize(20)
+        material_title_widget.setFont(material_font)
+        material_title_widget.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+
+        material_widget = QComboBox()
+        # Material font definition
+        material_font = material_widget.font()
+        material_font.setPointSize(15)
+        material_widget.setFont(material_font)
+
+        # Gets materials from MaterialEnum and loads them into a dictionary keyed by each material's name
+        self.materials = {mat.value.name: mat.value for mat in MaterialEnum}
+        # Sets the default active material to be the first material in the dictionary
+        self.active_material = [self.materials[mat] for mat in self.materials][0]  # Sussy
+        material_widget.addItems([mat for mat in self.materials])
+        material_widget.currentTextChanged.connect(self.material_changed)
         # ____________________________________
 
         lock_widget = QWidget()
         lock_widget.setLayout(lock_layout)
 
-        title_text_widget = QLabel("BlendiForce Menu")
-        font = title_text_widget.font()
-        font.setPointSize(25)
-        title_text_widget.setFont(font)
-        title_text_widget.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-
         main_layout.addWidget(title_text_widget)
         main_layout.addWidget(lock_widget)
+        main_layout.addWidget(material_title_widget)
         main_layout.addWidget(material_widget)
 
         main_widget = QWidget()
@@ -964,7 +974,6 @@ class MainWindow(QMainWindow):
 
     def material_changed(self, s: str) -> None:
         self.active_material = self.materials[s]
-        print(s)
 
     # True is represented as 2 for these functions due to PyQt6 default states
     def dx_set_state(self, state: int) -> None:
