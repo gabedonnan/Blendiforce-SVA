@@ -6,6 +6,11 @@ import random
 from collections import deque
 import numpy as np
 from typing import TypeVar, Any
+import sys
+from PyQt6.QtWidgets import (
+    QMainWindow, QApplication,
+    QComboBox, QVBoxLayout, QWidget, QLabel, QCheckBox
+)
 
 try:
     import threading
@@ -43,6 +48,12 @@ try:
 except ModuleNotFoundError:
     USE_PYNITE = False
     print("WARNING: Module 'PyNite' not found. Model analysis capability will be disabled.")
+
+
+
+
+
+
 
 VectorType = TypeVar("VectorType", bound="VectorTup")
 MaterialType = TypeVar("MaterialType", bound="Material")
@@ -851,6 +862,67 @@ class BlendObject:
         bpy.context.object.data.materials.append(random.choice(self.materials))
 
 
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+
+        self.setWindowTitle("BlendiForce Menu")
+
+        main_layout = QVBoxLayout()
+
+        # Display material dropdown menu _____
+        material_widget = QComboBox()
+        self.materials = {mat.value.name: mat.value for mat in MaterialEnum}
+        self.active_material = [self.materials[mat] for mat in self.materials][0]  # Sussy
+        material_widget.addItems([mat for mat in self.materials])
+        material_widget.currentTextChanged.connect(self.material_changed)
+        # ____________________________________
+
+        # Display axial lock checkboxes _____
+        self.lock_combo = [False, False, False, False, False, False]
+        # DX checkbox and text
+        dx_layout = QVBoxLayout()
+        dx_checkbox = QCheckBox()
+        dx_checkbox.stateChanged.connect(self.dx_set_state)
+        dx_text = QLabel("DX")
+        dx_layout.addWidget(dx_checkbox)
+        dx_layout.addWidget(dx_text)
+
+        lock_widget = QWidget()
+        lock_widget.setLayout(dx_layout)
+
+        main_layout.addWidget(lock_widget)
+        main_layout.addWidget(material_widget)
+
+        main_widget = QWidget()
+        main_widget.setLayout(main_layout)
+
+        self.setCentralWidget(main_widget)
+
+    def material_changed(self, s: str) -> None:
+        self.active_material = self.materials[s]
+        print(s)
+
+    # True is represented as 2 for these functions due to PyQt6 default states
+    def dx_set_state(self, state: int) -> None:
+        self.lock_combo[0] = (state == 2)
+
+    def dy_set_state(self, state: int) -> None:
+        self.lock_combo[1] = (state == 2)
+
+    def dz_set_state(self, state: int) -> None:
+        self.lock_combo[2] = (state == 2)
+
+    def rx_set_state(self, state: int) -> None:
+        self.lock_combo[3] = (state == 2)
+
+    def ry_set_state(self, state: int) -> None:
+        self.lock_combo[4] = (state == 2)
+
+    def rz_set_state(self, state: int) -> None:
+        self.lock_combo[5] = (state == 2)
+
+
 """
 Classless functions below, possibly aggregate them into a single class Ops at a later date
 """
@@ -1307,14 +1379,23 @@ def vert_locks(key: str = "NONE") -> dict:
 
 
 if __name__ == "__main__":
+
+    # Menu code
+    app = QApplication(sys.argv)
+    menu_window = MainWindow()
+    menu_window.show()
+    app.exec()  # Blocking
+
+    object_material = menu_window.active_material
+
     force_object_final = unify_to_fobject_mass(0.1)
     # If USE_PYNITE is false, the newly linked mesh is still rendered to the scene
     if USE_PYNITE:
         default_lock_dict = vert_locks(key="NONE")  # Get user input for this
-        force_finite = force_object_final.to_finite(MaterialEnum.STEEL.value, default_lock_dict, 1e6)
+        force_finite = force_object_final.to_finite(object_material, default_lock_dict, 1e6)
         bpy.ops.wm.save_mainfile()  # Saves the file before rendering via PyNite visualiser
         if USE_THREADING:
-            # Opens the render window in a new thread 
+            # Opens the render window in a new thread
             # This means that the original process does not crash upon the window closing
             render_thread = threading.Thread(target=render_finite, args=(force_finite, True))
             render_thread.start()
