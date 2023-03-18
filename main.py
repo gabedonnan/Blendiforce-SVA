@@ -9,7 +9,7 @@ from typing import TypeVar, Any
 import sys
 from PyQt6.QtWidgets import (
     QMainWindow, QApplication,
-    QComboBox, QVBoxLayout, QWidget, QLabel, QCheckBox, QSizePolicy
+    QComboBox, QVBoxLayout, QWidget, QLabel, QCheckBox, QSizePolicy, QRadioButton
 )
 from PyQt6.QtCore import Qt
 
@@ -959,13 +959,33 @@ class MainWindow(QMainWindow):
         material_widget.currentTextChanged.connect(self.material_changed)
         # ____________________________________
 
+        # Display Mass or Rad Radio Buttons___
+        self.use_mass = True
+        mass_rad_layout = QVBoxLayout()
+
+        mass_rad_title_widget = QLabel("Select whether your object is determined by a mass or a radius")
+        mass_rad_layout.addWidget(mass_rad_title_widget)
+
+        mass_selector = QRadioButton("Mass")
+        mass_selector.toggled.connect(self.set_mass)
+        mass_selector.setChecked(True)
+        mass_rad_layout.addWidget(mass_selector)
+
+        rad_selector = QRadioButton("Radius")
+        mass_rad_layout.addWidget(rad_selector)
+        # ____________________________________
+
         lock_widget = QWidget()
         lock_widget.setLayout(lock_layout)
+
+        mass_rad_widget = QWidget()
+        mass_rad_widget.setLayout(mass_rad_layout)
 
         main_layout.addWidget(title_text_widget)
         main_layout.addWidget(lock_widget)
         main_layout.addWidget(material_title_widget)
         main_layout.addWidget(material_widget)
+        main_layout.addWidget(mass_rad_widget)
 
         main_widget = QWidget()
         main_widget.setLayout(main_layout)
@@ -976,6 +996,7 @@ class MainWindow(QMainWindow):
         self.active_material = self.materials[s]
 
     # True is represented as 2 for these functions due to PyQt6 default states
+    # These all have to be different functions due to the fact that they can only be called without input
     def dx_set_state(self, state: int) -> None:
         self.lock_combo["DX"] = (state == 2)
 
@@ -993,6 +1014,10 @@ class MainWindow(QMainWindow):
 
     def rz_set_state(self, state: int) -> None:
         self.lock_combo["RZ"] = (state == 2)
+
+    def set_mass(self, state: bool) -> None:
+        self.use_mass = state
+
 
 
 """
@@ -1421,8 +1446,12 @@ if __name__ == "__main__":
     # User input applied
     object_material: MaterialType = menu_window.active_material
     default_lock_dict: dict = menu_window.lock_combo
+    use_mass: bool = menu_window.use_mass
 
-    force_object_final: ForceObjType = unify_to_fobject_mass(0.1)
+    if use_mass:
+        force_object_final: ForceObjType = unify_to_fobject_mass(0.1)
+    else:
+        force_object_final: ForceObjType = unify_to_fobject_rad(0.1)
     # If USE_PYNITE is false, the newly linked mesh is still rendered to the scene
     if USE_PYNITE:
         force_finite = force_object_final.to_finite(object_material, default_lock_dict, 1e6)
