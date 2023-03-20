@@ -11,7 +11,7 @@ import sys
 from PyQt6.QtGui import QDoubleValidator
 from PyQt6.QtWidgets import (
     QMainWindow, QApplication,
-    QComboBox, QVBoxLayout, QWidget, QLabel, QCheckBox, QSizePolicy, QRadioButton, QLineEdit
+    QComboBox, QVBoxLayout, QWidget, QLabel, QCheckBox, QSizePolicy, QRadioButton, QLineEdit, QFileDialog, QPushButton
 )
 from PyQt6.QtCore import Qt
 
@@ -36,6 +36,7 @@ try:
 except ModuleNotFoundError:
     try:
         import pickle
+
         USE_PICKLE = True
         USE_DILL = False
         print("WARNING: Module 'dill' not found. Using 'pickle' instead.")
@@ -47,16 +48,11 @@ except ModuleNotFoundError:
 try:
     from PyNite.Visualization import Renderer
     from PyNite.FEModel3D import FEModel3D
+
     USE_PYNITE = True
 except ModuleNotFoundError:
     USE_PYNITE = False
     print("WARNING: Module 'PyNite' not found. Model analysis capability will be disabled.")
-
-
-
-
-
-
 
 VectorType = TypeVar("VectorType", bound="VectorTup")
 MaterialType = TypeVar("MaterialType", bound="Material")
@@ -633,7 +629,7 @@ class ForceObject:
             use_tension, use_compression = not use_tension, not use_compression
             # Alternates compression only and tension only springs to avoid model instability
 
-            #Adds supports to the base nodes
+            # Adds supports to the base nodes
             final_finite.def_support(str(base_node), support_DX=True, support_DY=True, support_RZ=True)
 
         return final_finite
@@ -869,6 +865,7 @@ class MainWindow(QMainWindow):
     """
     PyQt6 based class defining a basic menu system
     """
+
     def __init__(self):
         super().__init__()
 
@@ -882,7 +879,7 @@ class MainWindow(QMainWindow):
             QCheckBox {
                 font-size: 15pt;
             }
-            
+
             QCheckBox::indicator {
                 width: 13px;
                 height: 13px;
@@ -898,7 +895,7 @@ class MainWindow(QMainWindow):
         # ____________________________________
 
         # Display axial lock checkboxes _____
-        self.lock_combo = {"DX": False, "DY": False, "DZ": False, "RX": False, "RY": False, "RZ": False}
+        self.lock_combo: dict = {"DX": False, "DY": False, "DZ": False, "RX": False, "RY": False, "RZ": False}
         lock_layout = QVBoxLayout()
 
         # Menu header text for axial locks
@@ -954,15 +951,15 @@ class MainWindow(QMainWindow):
         material_widget.setFont(material_font)
 
         # Gets materials from MaterialEnum and loads them into a dictionary keyed by each material's name
-        self.materials = {mat.value.name: mat.value for mat in MaterialEnum}
+        self.materials: dict = {mat.value.name: mat.value for mat in MaterialEnum}
         # Sets the default active material to be the first material in the dictionary
-        self.active_material = [self.materials[mat] for mat in self.materials][0]  # Sussy
+        self.active_material: MaterialType = [self.materials[mat] for mat in self.materials][0]  # Sussy
         material_widget.addItems([mat for mat in self.materials])
         material_widget.currentTextChanged.connect(self.material_changed)
         # ____________________________________
 
         # Display Mass or Rad Radio Buttons___
-        self.use_mass = True
+        self.use_mass: bool = True
         mass_rad_layout = QVBoxLayout()
 
         mass_rad_title_widget = QLabel("Select whether your object is determined by a mass or a radius")
@@ -978,18 +975,59 @@ class MainWindow(QMainWindow):
         # ____________________________________
 
         # Display mass or rad number field____
-        self.mass_rad_value = 0.1
+        self.mass_rad_value: float = 0.1
         # Add note above edit box
         mass_rad_editor_title_widget = QLabel("Mass / Radius value (Use scientific floating point notation)")
         mass_rad_layout.addWidget(mass_rad_editor_title_widget)
 
         mass_rad_input = QLineEdit()
-        only_double = QDoubleValidator()
         # Restricts the range between some small number above 0 and 9999
+        only_double = QDoubleValidator()
         only_double.setRange(0.01, 9999)
         mass_rad_input.setValidator(only_double)
         mass_rad_input.textChanged.connect(self.set_mass_rad_val)
         mass_rad_layout.addWidget(mass_rad_input)
+        # ____________________________________
+
+        # Display spring constant number field
+        spring_constant_layout = QVBoxLayout()
+        self.spring_constant_val: float = 1e6
+        # Add note above edit box
+        spring_constant_title_widget = QLabel("Base support spring constant value (Use scientific floating point "
+                                              "notation)")
+        spring_constant_layout.addWidget(spring_constant_title_widget)
+
+        spring_constant_input = QLineEdit()
+        # Restrings the range of inputs
+        only_double_spring = QDoubleValidator()
+        only_double_spring.setRange(1e-3, 1e20)
+        spring_constant_input.setValidator(only_double_spring)
+        spring_constant_input.textChanged.connect(self.set_spring_constant)
+        spring_constant_layout.addWidget(spring_constant_input)
+        # ____________________________________
+
+        # Display save path selector _________
+        save_path_layout = QVBoxLayout()
+        self.save_path: str = ""
+        # Add note above save box
+        save_path_title_widget = QLabel("Specify absolute save path for your model (Format: 'C:\\path\\filename.pkl')")
+        save_path_layout.addWidget(save_path_title_widget)
+
+        save_path_input = QLineEdit()
+        save_path_input.textChanged.connect(self.select_save_file)
+        save_path_layout.addWidget(save_path_input)
+        # ____________________________________
+
+        # Display load path selector _________
+        load_path_layout = QVBoxLayout()
+        self.load_path: str = ""
+        # Add note above load box
+        load_path_title_widget = QLabel("Choose to load file from path (Optional: only works for .pkl files)")
+        load_path_layout.addWidget(load_path_title_widget)
+
+        load_path_button = QPushButton("Select Load File (Optional)")
+        load_path_button.clicked.connect(self.select_load_file)
+        load_path_layout.addWidget(load_path_button)
         # ____________________________________
 
         # Final formatting____________________
@@ -999,11 +1037,23 @@ class MainWindow(QMainWindow):
         mass_rad_widget = QWidget()
         mass_rad_widget.setLayout(mass_rad_layout)
 
+        spring_constant_widget = QWidget()
+        spring_constant_widget.setLayout(spring_constant_layout)
+
+        save_path_widget = QWidget()
+        save_path_widget.setLayout(save_path_layout)
+
+        load_path_widget = QWidget()
+        load_path_widget.setLayout(load_path_layout)
+
         main_layout.addWidget(title_text_widget)
         main_layout.addWidget(lock_widget)
         main_layout.addWidget(material_title_widget)
         main_layout.addWidget(material_widget)
         main_layout.addWidget(mass_rad_widget)
+        main_layout.addWidget(spring_constant_widget)
+        main_layout.addWidget(save_path_widget)
+        main_layout.addWidget(load_path_widget)
 
         main_widget = QWidget()
         main_widget.setLayout(main_layout)
@@ -1042,6 +1092,36 @@ class MainWindow(QMainWindow):
         except ValueError:
             print("WARNING: Value is not a float")
 
+    def set_spring_constant(self, value: str) -> None:
+        try:
+            self.spring_constant_val = float(value)
+        except ValueError:
+            print("WARNING: Value is not a float")
+
+    def select_save_file(self, value: str) -> None:
+        self.save_path = value
+
+    def select_load_file(self, state: bool) -> None:
+        load_dialog = QFileDialog(self)
+        load_dialog.setWindowTitle("Select Load File")
+        if load_dialog.exec():
+            filenames = load_dialog.selectedFiles()
+            if ".pkl" in filenames[0]:
+                self.load_path = filenames[0]
+
+
+class ThreadReturnable(threading.Thread):
+    def __init__(self, group=None, target=None, name=None, args=(), kwargs={}, Verbose=None):
+        threading.Thread.__init__(self, group, target, name, args, kwargs)
+        self.return_value = None
+
+    def run(self) -> None:
+        if self._target is not None:
+            self.return_value = self._target(*self._args, **self._kwargs)
+
+    def join(self, *args) -> Any:
+        threading.Thread.join(self)
+        return self.return_value
 
 """
 Classless functions below, possibly aggregate them into a single class Ops at a later date
@@ -1348,13 +1428,12 @@ def render_finite(model: FEModel3D, deform: bool = False, save_path: str = "") -
     finite_renderer.render_model()
 
 
-def render_finite_from_file(file_path: str, deform: bool = False) -> None:
+def render_finite_from_file(file_path: str, deform: bool = False) -> int:
     """ Renders a pre-analyzed FEM model from a file
     :param file_path: Filepath from which the finite element model will be loaded. This must include file name.
     :param deform: Determines whether force based deformation will be displayed upon render
     :return: None
     """
-    finite_model = None
 
     # Brings global variables USE_DILL and USE_PICKLE into the function scope
     global USE_DILL, USE_PICKLE
@@ -1370,13 +1449,13 @@ def render_finite_from_file(file_path: str, deform: bool = False) -> None:
         else:
             # If neither pickle nor dill are found the file cannot be loaded
             print("Object could not be loaded due to: No save options available (Please install Pickle or Dill)")
-            return
+            return 1
     except FileNotFoundError:
         print(f"Object could not be loaded due to: FileNotFoundError for filepath {file_path}")
-        return
+        return 1
     except PermissionError:
         print(f"Object could not be loaded due to: PermissionError for filepath {file_path}")
-        return
+        return 1
 
     if finite_model:
         # Creates Renderer object which takes in analyzed FEM Model
@@ -1392,10 +1471,11 @@ def render_finite_from_file(file_path: str, deform: bool = False) -> None:
 
         # Renders the model. This creates a new window that will lock Blender as a program in order to
         finite_renderer.render_model()
-
+        return 0
     else:
         # finite_model is either None or some other un-analyzable data
         print("Object not loaded properly, possibly empty")
+        return 1
 
 
 def unify_to_fobject_mass(mass: float) -> ForceObjType:
@@ -1471,6 +1551,12 @@ if __name__ == "__main__":
     default_lock_dict: dict = menu_window.lock_combo
     use_mass: bool = menu_window.use_mass
     mass_rad_value: float = menu_window.mass_rad_value
+    spring_constant_value: float = menu_window.spring_constant_val
+    save_path: str = menu_window.save_path
+    load_path: str = menu_window.load_path
+
+    print(save_path)
+    print(load_path)
 
     if use_mass:
         force_object_final: ForceObjType = unify_to_fobject_mass(mass_rad_value)
@@ -1478,16 +1564,28 @@ if __name__ == "__main__":
         force_object_final: ForceObjType = unify_to_fobject_rad(mass_rad_value)
     # If USE_PYNITE is false, the newly linked mesh is still rendered to the scene
     if USE_PYNITE:
-        force_finite = force_object_final.to_finite(object_material, default_lock_dict, 1e6)
+        force_finite = force_object_final.to_finite(object_material, default_lock_dict, spring_constant_value)
         bpy.ops.wm.save_mainfile()  # Saves the file before rendering via PyNite visualiser
         if USE_THREADING:
             # Opens the render window in a new thread
             # This means that the original process does not crash upon the window closing
-            render_thread = threading.Thread(target=render_finite, args=(force_finite, True))
-            render_thread.start()
-            render_thread.join()
+
+            # Runs the render from file operation instead of the regular render operation
+            if load_path != "":
+                # Custom ThreadReturnable class allows threads to generate return values
+                render_thread = ThreadReturnable(target=render_finite_from_file, args=(load_path, True))
+                render_thread.start()
+                thread_return = render_thread.join()
+
+                # The following statement will only run if the render_finite_from_file function cannot find the file
+                if thread_return == 1:
+                    render_thread = threading.Thread(target=render_finite, args=(force_finite, True, save_path))
+            else:
+                render_thread = threading.Thread(target=render_finite, args=(force_finite, True, save_path))
+                render_thread.start()
+                render_thread.join()
         else:
             # Blender will crash upon window exiting due to an un-handleable error
             # Can only be fixed by using the multithreaded option
             # The error originates from the interaction of vtk and Blender
-            render_finite(force_finite, deform=True, save_path="C:\\Users\\Gabriel\\Documents\\finite_mesh.pkl")
+            render_finite(force_finite, deform=True, save_path=save_path)
