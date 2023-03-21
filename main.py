@@ -879,7 +879,6 @@ class MainWindow(QMainWindow):
             QCheckBox {
                 font-size: 15pt;
             }
-
             QCheckBox::indicator {
                 width: 13px;
                 height: 13px;
@@ -1203,6 +1202,7 @@ def force_obj_from_raw_mass(obj: str | object, mass: float,
     temp_dat = temp_obj.data
     vert_num = len(temp_dat.vertices)
     edge_num = len(temp_dat.edges)
+    face_num = len(temp_dat.polygons)
     global_verts = []  # Array of ForceVertex objects translated to global coordinates from local
     global_edges = []
     for i in range(vert_num):
@@ -1212,6 +1212,23 @@ def force_obj_from_raw_mass(obj: str | object, mass: float,
     for j in range(edge_num):  # LOOK INTO THIS, MAY BE SOURCE OF INEFFICIENCY
         edge_verts = temp_dat.edges[j].vertices
         global_edges.append([edge_verts[0], edge_verts[1]])
+
+    # Helps approximate faces into 1d FEM representation
+    # Takes each face and links each corner vertex to all other corners
+    # This will provide the structural integrity normally provided by a standard face
+    for k in range(face_num):
+        # Iterates through each face of the object
+        face_verts = temp_dat.polygons[k].vertices
+        # Condense current face's vertices into one smaller variable name
+        face_vert_num = len(face_verts)
+        for vert_one in range(face_vert_num):
+            # Iterate through each vertex in the face
+            for vert_two in range(vert_one + 1, face_vert_num):
+                # Iterate through all other face vertices without repeating previous work
+                if [face_verts[vert_one], face_verts[vert_two]] not in global_edges and \
+                        [face_verts[vert_two], face_verts[vert_one]] not in global_edges:
+                    # Check that cross-face edges have not yet been created
+                    global_edges.append([face_verts[vert_one], face_verts[vert_two]])
 
     final = ForceObjectUniformMass(global_verts, global_edges, obj_material.density, mass)
     final.apply_gravity()
@@ -1235,15 +1252,33 @@ def force_obj_from_raw_rad(obj: str | object, radius: float,
     temp_dat = temp_obj.data
     vert_num = len(temp_dat.vertices)
     edge_num = len(temp_dat.edges)
+    face_num = len(temp_dat.polygons)
     global_verts = []  # Array of ForceVertex objects translated to global coordinates from local
     global_edges = []
     for i in range(vert_num):
         temp_glob = temp_obj.matrix_world @ temp_dat.vertices[i].co  # Translation to global coords
         global_verts.append(ForceVertex(VectorTup(temp_glob[0], temp_glob[1], temp_glob[2]), VectorTup(0, 0, 0)))
 
-    for j in range(edge_num):  # LOOK INTO THIS, MAY BE SOURCE OF INEFFICIENCY
+    for j in range(edge_num):
         edge_verts = temp_dat.edges[j].vertices
         global_edges.append([edge_verts[0], edge_verts[1]])
+
+    # Helps approximate faces into 1d FEM representation
+    # Takes each face and links each corner vertex to all other corners
+    # This will provide the structural integrity normally provided by a standard face
+    for k in range(face_num):
+        # Iterates through each face of the object
+        face_verts = temp_dat.polygons[k].vertices
+        # Condense current face's vertices into one smaller variable name
+        face_vert_num = len(face_verts)
+        for vert_one in range(face_vert_num):
+            # Iterate through each vertex in the face
+            for vert_two in range(vert_one + 1, face_vert_num):
+                # Iterate through all other face vertices without repeating previous work
+                if [face_verts[vert_one], face_verts[vert_two]] not in global_edges and \
+                        [face_verts[vert_two], face_verts[vert_one]] not in global_edges:
+                    # Check that cross-face edges have not yet been created
+                    global_edges.append([face_verts[vert_one], face_verts[vert_two]])
 
     final = ForceObjectUniformRad(global_verts, global_edges, obj_material.density, radius)
     final.apply_gravity()
