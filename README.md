@@ -14,3 +14,5 @@ Set edit mode (face/vert/edge):
 
 Get active object:
 `bpy.context.active_object`
+
+Flowchart for diss @ https://app.diagrams.net/#G1wQDt6sTcFuspLHn4elXabmbRPKbr9Xtv
