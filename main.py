@@ -861,6 +861,181 @@ class BlendObject:
         bpy.context.object.data.materials.append(random.choice(self.materials))
 
 
+class MaterialForceWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+
+        self.setWindowTitle("BlendiForce Menu")
+
+        self.setStyleSheet("""
+                    QCheckBox {
+                        font-size: 15pt;
+                    }
+                    QCheckBox::indicator {
+                        width: 13px;
+                        height: 13px;
+                    }
+                """)
+
+        main_layout = QVBoxLayout()
+
+        # Display title ______________________
+        title_text_widget = QLabel("BlendiForce Menu")
+        font_25 = title_text_widget.font()
+        # Creating and defining a font of size 25
+        font_25.setPointSize(25)
+        title_text_widget.setFont(font_25)
+        title_text_widget.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        # Text explaining the purpose of the window
+        explanation_text_widget = QLabel("In this menu you can create force fields and material assignment fields\n"
+                                         "These fields can be used for creating multi-material objects"
+                                         "or for applying forces")
+        font_15 = explanation_text_widget.font()
+        # Creating and defining a font of size 15
+        font_15.setPointSize(15)
+        explanation_text_widget.setFont(font_15)
+
+        warning_text_widget = QLabel("WARNING: You may change the scale created force and material fields,\n"
+                                     "however rotating or deforming the shape into a non-cuboid can cause "
+                                     "undefined behaviour.\n"
+                                     "If more complicated shapes are required simply create multiple material boxes.")
+        warning_text_widget.setStylesheet(
+            """
+                color: red;
+                border: 1px solid black;
+                font-size: 12pt;
+            """
+        )
+        # ____________________________________
+
+        # Display Material Selector __________
+        material_title_widget = QLabel("Material field creation: Select your material to create a material field")
+        font_20 = material_title_widget.font()
+        # Creating and defining a font of size 20
+        font_20.setPointSize(20)
+        material_title_widget.setFont(font_20)
+        # ____________________________________
+
+        # Display material dropdown menu _____
+        material_layout = QVBoxLayout()
+
+        material_title_widget = QLabel("Select Material for Material Field:")
+        material_title_widget.setFont(font_20)
+        material_title_widget.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        # Add title to layout
+        material_layout.addWidget(material_title_widget)
+
+        material_widget = QComboBox()
+        # Material font definition
+        material_font = material_widget.font()
+        material_font.setPointSize(15)
+        material_widget.setFont(material_font)
+        # Add materials to dropdown __________
+        self.materials: list = [mat.value.name for mat in MaterialEnum]
+        # Sets the default active material to be the first material in the dictionary
+        self.active_material: str = self.materials[0]  # Sussy
+        material_widget.addItems(self.materials)
+        material_widget.currentTextChanged.connect(self.material_changed)
+        # Add dropdown to layout
+        material_layout.addWidget(material_widget)
+        # Create button to add material field to scene
+        material_button = QPushButton("Add material field to Scene")
+        material_button.clicked.connect(self.create_material_field)
+        # Add button to layout
+        material_layout.addWidget(material_button)
+        # ____________________________________
+
+        # Display force field force assigners_
+        force_field_layout = QVBoxLayout()
+        self.force_strength_x = 0.0
+        self.force_strength_y = 0.0
+        self.force_strength_z = 0.0
+        # Create a validator enforcing: force values must stay between 0 and 1e10 in each direction
+        only_double = QDoubleValidator()
+        only_double.setRange(0, 1e10)
+        force_input_x = QLineEdit("X-Direction Force")
+        force_input_x.setValidator(only_double)
+        force_input_x.textChanged.connect(self.set_force_x)
+        force_field_layout.addWidget(force_input_x)
+
+        force_input_y = QLineEdit("Y-Direction Force")
+        force_input_y.setValidator(only_double)
+        force_input_y.textChanged.connect(self.set_force_y)
+        force_field_layout.addWidget(force_input_y)
+
+        force_input_z = QLineEdit("Z-Direction Force")
+        force_input_z.setValidator(only_double)
+        force_input_z.textChanged.connect(self.set_force_z)
+        force_field_layout.addWidget(force_input_z)
+
+        force_field_button = QPushButton("Add force field to Scene")
+        force_field_button.clicked.connect(self.create_force_field)
+        force_field_layout.addWidget(force_field_button)
+        # ____________________________________
+
+        # Add activate analysis checkbox _____
+        self.activate_analysis: bool = False
+        activate_analysis_checkbox = QCheckBox("Activate material analysis on window close?")
+        activate_analysis_checkbox.stateChanged.connect(self.set_analysis)
+        # ____________________________________
+
+        material_final_widget = QWidget()
+        material_final_widget.setLayout(material_layout)
+
+        force_field_widget = QWidget()
+        force_field_widget.setLayout(force_field_layout)
+
+        main_layout.addWidget(title_text_widget)
+        main_layout.addWidget(explanation_text_widget)
+        main_layout.addWidget(warning_text_widget)
+        main_layout.addWidget(material_final_widget)
+        main_layout.addWidget(force_field_widget)
+        main_layout.addWidget(activate_analysis_checkbox)
+
+        main_widget = QWidget()
+        main_widget.setLayout(main_layout)
+        self.setCentralWidget(main_widget)
+
+    # These three functions have to be declared separately as arguments cannot be explicitly passed to them
+    def set_force_x(self, value: str) -> None:
+        try:
+            self.force_strength_x = float(value)
+        except ValueError:
+            pass
+
+    def set_force_y(self, value: str) -> None:
+        try:
+            self.force_strength_y = float(value)
+        except ValueError:
+            pass
+
+    def set_force_z(self, value: str) -> None:
+        try:
+            self.force_strength_z = float(value)
+        except ValueError:
+            pass
+
+    def set_analysis(self, state: int) -> None:
+        self.activate_analysis = (state == 2)
+
+    def material_changed(self, s: str) -> None:
+        self.active_material = s
+
+    def create_material_field(self, state: bool) -> None:
+        bpy.ops.mesh.primitive_cube_add()
+        bpy.context.object["MATERIAL"] = self.active_material
+        bpy.context.object.color = (1, 0, 0, 1)  # Assigns a red colour to a material object
+        # The colour is a purely cosmetic change
+
+    def create_force_field(self, state: bool) -> None:
+        bpy.ops.mesh.primitive_cube_add()
+        bpy.context.object["FORCE_STRENGTH_X"] = self.force_strength_x
+        bpy.context.object["FORCE_STRENGTH_Y"] = self.force_strength_y
+        bpy.context.object["FORCE_STRENGTH_Z"] = self.force_strength_z
+        bpy.context.object.color = (0, 0, 1, 1)  # Assigns a blue colour to a force field object
+        # The colour is a purely cosmetic change
+
+
 class MainWindow(QMainWindow):
     """
     PyQt6 based class defining a basic menu system
@@ -1089,13 +1264,13 @@ class MainWindow(QMainWindow):
         try:
             self.mass_rad_value = float(value)
         except ValueError:
-            print("WARNING: Value is not a float")
+            pass
 
     def set_spring_constant(self, value: str) -> None:
         try:
             self.spring_constant_val = float(value)
         except ValueError:
-            print("WARNING: Value is not a float")
+            pass
 
     def select_save_file(self, value: str) -> None:
         self.save_path = value
@@ -1109,6 +1284,7 @@ class MainWindow(QMainWindow):
                 self.load_path = filenames[0]
 
 
+# Find original to reference this ###################################
 class ThreadReturnable(threading.Thread):
     def __init__(self, group=None, target=None, name=None, args=(), kwargs={}, Verbose=None):
         threading.Thread.__init__(self, group, target, name, args, kwargs)
@@ -1209,7 +1385,7 @@ def force_obj_from_raw_mass(obj: str | object, mass: float,
         temp_glob = temp_obj.matrix_world @ temp_dat.vertices[i].co  # Translation to global coords
         global_verts.append(ForceVertex(VectorTup(temp_glob[0], temp_glob[1], temp_glob[2]), VectorTup(0, 0, 0)))
 
-    for j in range(edge_num):  # LOOK INTO THIS, MAY BE SOURCE OF INEFFICIENCY
+    for j in range(edge_num):
         edge_verts = temp_dat.edges[j].vertices
         global_edges.append([edge_verts[0], edge_verts[1]])
 
