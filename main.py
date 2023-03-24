@@ -875,6 +875,11 @@ class MaterialForceWindow(QMainWindow):
                         width: 13px;
                         height: 13px;
                     }
+                    QLabel#warning_text {
+                        color: red;
+                        border: 1px solid black;
+                        font-size: 12pt;
+                    }
                 """)
 
         main_layout = QVBoxLayout()
@@ -887,25 +892,22 @@ class MaterialForceWindow(QMainWindow):
         title_text_widget.setFont(font_25)
         title_text_widget.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         # Text explaining the purpose of the window
-        explanation_text_widget = QLabel("In this menu you can create force fields and material assignment fields\n"
-                                         "These fields can be used for creating multi-material objects"
-                                         "or for applying forces")
+        explanation_text_widget = QLabel("In this menu force fields and material assignment fields can be created.\n"
+                                         "These fields can be used for creating multi-material objects "
+                                         "or for applying directional forces")
         font_15 = explanation_text_widget.font()
         # Creating and defining a font of size 15
         font_15.setPointSize(15)
         explanation_text_widget.setFont(font_15)
+        explanation_text_widget.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
-        warning_text_widget = QLabel("WARNING: You may change the scale created force and material fields,\n"
+        warning_text_widget = QLabel("WARNING: You may change the scale (including directional stretches) "
+                                     "or position of created force and material fields,\n"
                                      "however rotating or deforming the shape into a non-cuboid can cause "
                                      "undefined behaviour.\n"
                                      "If more complicated shapes are required simply create multiple material boxes.")
-        warning_text_widget.setStylesheet(
-            """
-                color: red;
-                border: 1px solid black;
-                font-size: 12pt;
-            """
-        )
+        warning_text_widget.setObjectName("warning_text")
+        warning_text_widget.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         # ____________________________________
 
         # Display Material Selector __________
@@ -953,17 +955,17 @@ class MaterialForceWindow(QMainWindow):
         # Create a validator enforcing: force values must stay between 0 and 1e10 in each direction
         only_double = QDoubleValidator()
         only_double.setRange(0, 1e10)
-        force_input_x = QLineEdit("X-Direction Force")
+        force_input_x = QLineEdit("0")
         force_input_x.setValidator(only_double)
         force_input_x.textChanged.connect(self.set_force_x)
         force_field_layout.addWidget(force_input_x)
 
-        force_input_y = QLineEdit("Y-Direction Force")
+        force_input_y = QLineEdit("0")
         force_input_y.setValidator(only_double)
         force_input_y.textChanged.connect(self.set_force_y)
         force_field_layout.addWidget(force_input_y)
 
-        force_input_z = QLineEdit("Z-Direction Force")
+        force_input_z = QLineEdit("0")
         force_input_z.setValidator(only_double)
         force_input_z.textChanged.connect(self.set_force_z)
         force_field_layout.addWidget(force_input_z)
@@ -1703,12 +1705,17 @@ def unify_to_fobject_mass(mass: float) -> ForceObjType:
         print("WARNING: Objects cannot have 0 mass, automatically adjusting to a mass of 1 kilogram")
         mass = 1
 
-    bpy_objects = [obj for obj in bpy.data.objects if obj.type == "MESH"]
+    bpy_objects = [obj for obj in bpy.data.objects if obj.type == "MESH" and
+                   not hasattr(obj, "MATERIAL") and not hasattr(obj, "FORCE_STRENGTH_X")]
+    bpy_objects_material = [obj for obj in bpy.data.objects if hasattr(obj, "MATERIAL")]
+    bpy_objects_force = [obj for obj in bpy.data.objects if hasattr(obj, "FORCE_STRENGTH_X")]
     force_objects = [force_obj_from_raw_mass(ob, mass) for ob in bpy_objects]
 
     if len(force_objects) > 1:
         force_objects[0].mesh_link_chain(force_objects[1:])
-        bpy.ops.object.select_all(action="SELECT")
+        bpy.ops.object.select_all(action="DESELECT")
+        for obj in bpy_objects:
+            obj.select_set(True)
         bpy.ops.object.delete()
         force_objects[0].to_blend_object().make(fast=True)
         bpy_object = bpy.data.objects[0]
@@ -1750,53 +1757,59 @@ def unify_to_fobject_rad(radius: float) -> ForceObjType:
 
 
 if __name__ == "__main__":
+    # Field Menu code
+    field_app = QApplication(sys.argv)
+    field_window = MaterialForceWindow()
+    field_window.show()
+    field_app.exec()
 
-    # Menu code
-    app = QApplication(sys.argv)
-    menu_window = MainWindow()
-    menu_window.show()
-    app.exec()  # Blocking
+    if field_window.activate_analysis:
+        # Main menu code
+        main_app = QApplication(sys.argv)
+        menu_window = MainWindow()
+        menu_window.show()
+        main_app.exec()  # Blocking
 
-    # User input applied
-    object_material: MaterialType = menu_window.active_material
-    default_lock_dict: dict = menu_window.lock_combo
-    use_mass: bool = menu_window.use_mass
-    mass_rad_value: float = menu_window.mass_rad_value
-    spring_constant_value: float = menu_window.spring_constant_val
-    save_path: str = menu_window.save_path
-    load_path: str = menu_window.load_path
+        # User input applied
+        object_material: MaterialType = menu_window.active_material
+        default_lock_dict: dict = menu_window.lock_combo
+        use_mass: bool = menu_window.use_mass
+        mass_rad_value: float = menu_window.mass_rad_value
+        spring_constant_value: float = menu_window.spring_constant_val
+        save_path: str = menu_window.save_path
+        load_path: str = menu_window.load_path
 
-    print(save_path)
-    print(load_path)
+        print(save_path)
+        print(load_path)
 
-    if use_mass:
-        force_object_final: ForceObjType = unify_to_fobject_mass(mass_rad_value)
-    else:
-        force_object_final: ForceObjType = unify_to_fobject_rad(mass_rad_value)
-    # If USE_PYNITE is false, the newly linked mesh is still rendered to the scene
-    if USE_PYNITE:
-        force_finite = force_object_final.to_finite(object_material, default_lock_dict, spring_constant_value)
-        bpy.ops.wm.save_mainfile()  # Saves the file before rendering via PyNite visualiser
-        if USE_THREADING:
-            # Opens the render window in a new thread
-            # This means that the original process does not crash upon the window closing
-
-            # Runs the render from file operation instead of the regular render operation
-            if load_path != "":
-                # Custom ThreadReturnable class allows threads to generate return values
-                render_thread = ThreadReturnable(target=render_finite_from_file, args=(load_path, True))
-                render_thread.start()
-                thread_return = render_thread.join()
-
-                # The following statement will only run if the render_finite_from_file function cannot find the file
-                if thread_return == 1:
-                    render_thread = threading.Thread(target=render_finite, args=(force_finite, True, save_path))
-            else:
-                render_thread = threading.Thread(target=render_finite, args=(force_finite, True, save_path))
-                render_thread.start()
-                render_thread.join()
+        if use_mass:
+            force_object_final: ForceObjType = unify_to_fobject_mass(mass_rad_value)
         else:
-            # Blender will crash upon window exiting due to an un-handleable error
-            # Can only be fixed by using the multithreaded option
-            # The error originates from the interaction of vtk and Blender
-            render_finite(force_finite, deform=True, save_path=save_path)
+            force_object_final: ForceObjType = unify_to_fobject_rad(mass_rad_value)
+        # If USE_PYNITE is false, the newly linked mesh is still rendered to the scene
+        if USE_PYNITE:
+            force_finite = force_object_final.to_finite(object_material, default_lock_dict, spring_constant_value)
+            bpy.ops.wm.save_mainfile()  # Saves the file before rendering via PyNite visualiser
+            if USE_THREADING:
+                # Opens the render window in a new thread
+                # This means that the original process does not crash upon the window closing
+
+                # Runs the render from file operation instead of the regular render operation
+                if load_path != "":
+                    # Custom ThreadReturnable class allows threads to generate return values
+                    render_thread = ThreadReturnable(target=render_finite_from_file, args=(load_path, True))
+                    render_thread.start()
+                    thread_return = render_thread.join()
+
+                    # The following statement will only run if the render_finite_from_file function cannot find the file
+                    if thread_return == 1:
+                        render_thread = threading.Thread(target=render_finite, args=(force_finite, True, save_path))
+                else:
+                    render_thread = threading.Thread(target=render_finite, args=(force_finite, True, save_path))
+                    render_thread.start()
+                    render_thread.join()
+            else:
+                # Blender will crash upon window exiting due to an un-handleable error
+                # Can only be fixed by using the multithreaded option
+                # The error originates from the interaction of vtk and Blender
+                render_finite(force_finite, deform=True, save_path=save_path)
