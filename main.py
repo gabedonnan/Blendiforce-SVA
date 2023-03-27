@@ -440,7 +440,7 @@ class ForceObject:
             max_x = -math.inf
             max_y = -math.inf
             max_z = -math.inf
-            for force_vert in force_field.vertices:
+            for force_vert in force_field.data.vertices:
                 temp_glob = force_field.matrix_world @ force_vert.co
                 min_x = min(min_x, temp_glob[0])
                 min_y = min(min_y, temp_glob[1])
@@ -458,8 +458,6 @@ class ForceObject:
                 VectorTup(max_x, max_y, max_z),
                 VectorTup(force_x, force_y, force_z)
             )
-
-
 
     def find_base(self, tolerance: float = 0) -> set[int]:
         """ Finds nodes which the ForceObject would rest on if placed vertically downwards
@@ -1341,6 +1339,7 @@ class ThreadReturnable(threading.Thread):
         threading.Thread.join(self)
         return self.return_value
 
+
 """
 Classless functions below, possibly aggregate them into a single class Ops at a later date
 """
@@ -1749,7 +1748,7 @@ def unify_to_fobject_mass(mass: float) -> ForceObjType:
     bpy_objects = [obj for obj in bpy.data.objects if obj.type == "MESH" and
                    obj.get("MATERIAL") is None and obj.get("FORCE_STRENGTH_X") is None]
     bpy_objects_material = [obj for obj in bpy.data.objects if obj.get("MATERIAL") is not None]
-    bpy_objects_force = [obj for obj in bpy.data.objects if obj.get("MATERIAL") is not None]
+    bpy_objects_force = [obj for obj in bpy.data.objects if obj.get("FORCE_STRENGTH_X") is not None]
 
     force_objects = [force_obj_from_raw_mass(ob, mass) for ob in bpy_objects]
 
@@ -1783,8 +1782,12 @@ def unify_to_fobject_rad(radius: float) -> ForceObjType:
         print("WARNING: An object cannot have element radius of 0, automatically adjusting to 1 meter")
         radius = 1
 
-    bpy_objects = [obj for obj in bpy.data.objects if obj.type == "MESH"]
-    force_objects = [force_obj_from_raw_rad(ob, radius) for ob in bpy_objects]
+    bpy_objects = [obj for obj in bpy.data.objects if obj.type == "MESH" and
+                   obj.get("MATERIAL") is None and obj.get("FORCE_STRENGTH_X") is None]
+    bpy_objects_material = [obj for obj in bpy.data.objects if obj.get("MATERIAL") is not None]
+    bpy_objects_force = [obj for obj in bpy.data.objects if obj.get("FORCE_STRENGTH_X") is not None]
+
+    force_objects = [force_obj_from_raw_mass(ob, radius) for ob in bpy_objects]
 
     if len(force_objects) > 1:
         force_objects[0].mesh_link_chain(force_objects[1:])
@@ -1794,6 +1797,7 @@ def unify_to_fobject_rad(radius: float) -> ForceObjType:
         bpy_object = bpy.data.objects[0]
         return force_obj_from_raw_rad(bpy_object, radius)
     elif len(force_objects) == 1:
+        force_objects[0].apply_force_fields(bpy_objects_force)
         return force_objects[0]
     else:
         raise IndexError("IndexError: force_objects has zero length, please add objects to the blender scene")
@@ -1830,6 +1834,7 @@ if __name__ == "__main__":
             force_object_final: ForceObjType = unify_to_fobject_mass(mass_rad_value)
         else:
             force_object_final: ForceObjType = unify_to_fobject_rad(mass_rad_value)
+
         if use_gravity:
             force_object_final.apply_gravity()
         # If USE_PYNITE is false, the newly linked mesh is still rendered to the scene
