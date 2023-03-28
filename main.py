@@ -301,11 +301,11 @@ class MaterialEnum(Enum):
     STEEL = Material("STEEL", 7900, 2.1e11, 7.93e10)
 
     # Birch material from: https://www.matweb.com/search/datasheet_print.aspx?matguid=c499c231f20d4284a4da8bea3d2644fc
-    BIRCH = Material("WOOD_BIRCH", 640, 1.186e10, 8.34e6)
+    WOOD_BIRCH = Material("WOOD_BIRCH", 640, 1.186e10, 8.34e6)
 
     # Oak material from: https://www.matweb.com/search/DataSheet.aspx?MatGUID=ea505704d8d343f2800de42db7b16de8&ckck=1
     # Green oak specifically
-    OAK = Material("WOOD_OAK", 750, 7.86e9, 6.41e6)
+    WOOD_OAK = Material("WOOD_OAK", 750, 7.86e9, 6.41e6)
 
     # Granite material from: https://www.matweb.com/search/datasheet.aspx?matguid=3d4056a86e79481cb6a80c89caae1d90
     # and https://www.sciencedirect.com/science/article/pii/S1674775522000993
@@ -316,10 +316,10 @@ class MaterialEnum(Enum):
     DIAMOND = Material("DIAMOND", 3340, 1.22e12, 5.3e11)
 
     # Plastic material from: https://designerdata.nl/materials/plastics/thermo-plastics/low-density-polyethylene
-    POLYETHYLENE = Material("PLASTIC_POLYETHYLENE", 955, 3e8, 2.25e8)
+    PLASTIC_POLYETHYLENE = Material("PLASTIC_POLYETHYLENE", 955, 3e8, 2.25e8)
 
     # Plastic material from: https://www.matweb.com/search/datasheet_print.aspx?matguid=e19bc7065d1c4836a89d41ff23d47413
-    PVC = Material("PLASTIC_PVC", 1300, 1.7e9, 6.35e7)
+    PLASTIC_PVC = Material("PLASTIC_PVC", 1300, 1.7e9, 6.35e7)
 
     # Glass material from: https://www.structuralglass.org/single-post/2016/11/26/glass-physical-properties
     # The model cannot account for the drastic difference in tensile and compressive strength for glass
@@ -601,6 +601,15 @@ class ForceObject:
             # Adds other object's edges to first object
             # This operation shifts each edge value to point to the correct verts in the new combined object
 
+    def node_collide(self, edge: list[int], bpy_material_objects: list[tuple[VectorType, VectorType]]) -> int:
+        for i, vert_pair in enumerate(bpy_material_objects):
+            if (vert_pair[0].x < self.verts[edge[0]].loc.x < vert_pair[1].x and
+                    vert_pair[0].y < self.verts[edge[0]].loc.y < vert_pair[1].y and
+                    vert_pair[0].z < self.verts[edge[0]].loc.z < vert_pair[1].z):
+                return i
+        return -1
+
+
     # Creates a finite element model from a mesh
     def to_finite(self, mat: MaterialType, lock_dict: dict, spring_constant: float) -> FEModel3D:  # Redo return typing
         """ Compiles ForceObject to FEA model via the following steps:
@@ -615,7 +624,38 @@ class ForceObject:
         :return: FEModel3D Object
         """
         final_finite = FEModel3D()
-        density, E, G, Iy, Iz, J, A = mat.as_tup()
+        # Unpacks base material
+        base_density, base_E, base_G, base_Iy, base_Iz, base_J, base_A = mat.as_tup()
+        use_tension = True
+        use_compression = False
+        bpy_objects_material = [obj for obj in bpy.data.objects if obj.get("MATERIAL") is not None]
+
+        mat_field_coords = []
+        mat_field_materials = []
+        # Unpacks bpy objects into two arrays
+        # One array contains the defining coordinates for each obj (i.e. lowest value and highest value vert)
+        # The other contains the material representations of each object defined by their "MATERIAL" property
+        for mat_field in bpy_objects_material:
+            min_x = math.inf
+            min_y = math.inf
+            min_z = math.inf
+            max_x = -math.inf
+            max_y = -math.inf
+            max_z = -math.inf
+            # Finds minimum and maximum vertex locations
+            for force_vert in mat_field.data.vertices:
+                temp_glob = mat_field.matrix_world @ force_vert.co
+                min_x = min(min_x, temp_glob[0])
+                min_y = min(min_y, temp_glob[1])
+                min_z = min(min_z, temp_glob[2])
+                max_x = max(max_x, temp_glob[0])
+                max_y = max(max_y, temp_glob[1])
+                max_z = max(max_z, temp_glob[2])
+            # Adds min and max coordinates in VectorTup objects to a list to avoid unnecessary re-computing
+            mat_field_coords.append((VectorTup(min_x, min_y, min_z), VectorTup(max_x, max_y, max_z)))
+            # Populates material list with actual material values by using mat_field key references
+            mat_field_materials.append(MaterialEnum[mat_field["MATERIAL"]].value)
+
         for i, node in enumerate(self.verts):
             final_finite.add_node(str(i), node.loc.x, node.loc.y, node.loc.z)
             if i not in self.base_nodes:
@@ -628,9 +668,71 @@ class ForceObject:
                     support_RY=lock_dict["RY"],
                     support_RZ=lock_dict["RZ"]
                 )
+            else:
+                # Adds springs to the base nodes
+                spring_node_name = f"{i}s"
+                final_finite.add_node(spring_node_name, node.loc.x, node.loc.y, node.loc.z - 1)
+                # Adds node from which spring can be linked to corresponding base node
+
+                final_finite.add_spring(
+                    f"Spring{i}",
+                    str(i),
+                    spring_node_name,
+                    spring_constant,
+                    tension_only=use_tension,
+                    comp_only=use_compression
+                )
+
+                final_finite.def_support(
+                    spring_node_name,
+                    support_DX=True,
+                    support_DY=True,
+                    support_DZ=True,
+                    support_RX=True,
+                    support_RY=True,
+                    support_RZ=True
+                )  # Supports spring base node in all directions
+
+                use_tension, use_compression = not use_tension, not use_compression
+                # Alternates compression only and tension only springs to avoid model instability
+
+                # Adds supports to the base nodes
+                final_finite.def_support(str(i), support_DX=True, support_DY=True, support_RZ=True)
+
         for j, (edge, rad) in enumerate(zip(self.edges, self.edge_rads)):
-            Iy, Iz, J, A = mat.return_recalc_radius(rad)
-            final_finite.add_member(f"Edge{j}", str(edge[0]), str(edge[1]), E, G, Iy, Iz, J, A)
+            # Checks if both nodes in edge collide with each matrix field
+            # Uses walrus operator to automatically assign the index if it is true
+            if (temp_mat_index := self.node_collide(edge, mat_field_coords)) != -1:
+                (  # This looks insane but PEP8 dictates it must be so
+                    temp_density, temp_E, temp_G,
+                    temp_Iy, temp_Iz, temp_J, temp_A
+                ) = mat_field_materials[temp_mat_index].as_tup()
+                temp_Iy, temp_Iz, temp_J, temp_A = mat_field_materials[temp_mat_index].return_recalc_radius(rad)
+                final_finite.add_member(
+                    f"Edge{j}",
+                    str(edge[0]),
+                    str(edge[1]),
+                    temp_E,
+                    temp_G,
+                    temp_Iy,
+                    temp_Iz,
+                    temp_J,
+                    temp_A
+                )
+            else:
+                base_Iy, base_Iz, base_J, base_A = mat.return_recalc_radius(rad)
+                final_finite.add_member(
+                    f"Edge{j}",
+                    str(edge[0]),
+                    str(edge[1]),
+                    base_E,
+                    base_G,
+                    base_Iy,
+                    base_Iz,
+                    base_J,
+                    base_A
+                )
+
         for k, fnode in enumerate(self.verts):
             final_finite.add_node_load(str(k), Direction='FX', P=fnode.dir.x,
                                        case="Case 1")
@@ -639,38 +741,8 @@ class ForceObject:
             final_finite.add_node_load(str(k), Direction='FZ', P=fnode.dir.z,
                                        case="Case 1")
 
-        use_tension = True
-        use_compression = False
-
         # self.base_nodes is a list of indices of vertices within self.verts
         # where the nodes comprise the base of the object
-        for l, base_node in enumerate(self.base_nodes):
-            # Adds springs to the base nodes
-            vert_literal = self.verts[base_node]
-            spring_node_name = f"{l}s"
-            final_finite.add_node(spring_node_name, vert_literal.loc.x, vert_literal.loc.y, vert_literal.loc.z - 1)
-            # Adds node from which spring can be linked to corresponding base node
-
-            final_finite.add_spring(f"Spring{l}", str(base_node), spring_node_name,
-                                    spring_constant, tension_only=use_tension,
-                                    comp_only=use_compression)
-
-            final_finite.def_support(
-                spring_node_name,
-                support_DX=True,
-                support_DY=True,
-                support_DZ=True,
-                support_RX=True,
-                support_RY=True,
-                support_RZ=True
-            )  # Supports spring base node in all directions
-
-            use_tension, use_compression = not use_tension, not use_compression
-            # Alternates compression only and tension only springs to avoid model instability
-
-            # Adds supports to the base nodes
-            final_finite.def_support(str(base_node), support_DX=True, support_DY=True, support_RZ=True)
-
         return final_finite
 
     def get_net_moment(self) -> VectorType:
@@ -1747,7 +1819,6 @@ def unify_to_fobject_mass(mass: float) -> ForceObjType:
 
     bpy_objects = [obj for obj in bpy.data.objects if obj.type == "MESH" and
                    obj.get("MATERIAL") is None and obj.get("FORCE_STRENGTH_X") is None]
-    bpy_objects_material = [obj for obj in bpy.data.objects if obj.get("MATERIAL") is not None]
     bpy_objects_force = [obj for obj in bpy.data.objects if obj.get("FORCE_STRENGTH_X") is not None]
 
     force_objects = [force_obj_from_raw_mass(ob, mass) for ob in bpy_objects]
@@ -1784,7 +1855,6 @@ def unify_to_fobject_rad(radius: float) -> ForceObjType:
 
     bpy_objects = [obj for obj in bpy.data.objects if obj.type == "MESH" and
                    obj.get("MATERIAL") is None and obj.get("FORCE_STRENGTH_X") is None]
-    bpy_objects_material = [obj for obj in bpy.data.objects if obj.get("MATERIAL") is not None]
     bpy_objects_force = [obj for obj in bpy.data.objects if obj.get("FORCE_STRENGTH_X") is not None]
 
     force_objects = [force_obj_from_raw_mass(ob, radius) for ob in bpy_objects]
