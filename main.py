@@ -626,8 +626,8 @@ class ForceObject:
         final_finite = FEModel3D()
         # Unpacks base material
         base_density, base_E, base_G, base_Iy, base_Iz, base_J, base_A = mat.as_tup()
-        use_tension = True
-        use_compression = False
+
+        # Gets the raw blender material objects
         bpy_objects_material = [obj for obj in bpy.data.objects if obj.get("MATERIAL") is not None]
 
         mat_field_coords = []
@@ -670,21 +670,32 @@ class ForceObject:
                 )
             else:
                 # Adds springs to the base nodes
-                spring_node_name = f"{i}s"
-                final_finite.add_node(spring_node_name, node.loc.x, node.loc.y, node.loc.z - 1)
+                spring_node_name_compression = f"{i}Cs"
+                spring_node_name_tension = f"{i}Ts"
+                final_finite.add_node(spring_node_name_compression, node.loc.x, node.loc.y, node.loc.z - 1.1)
+                final_finite.add_node(spring_node_name_tension, node.loc.x, node.loc.y, node.loc.z - 1)
                 # Adds node from which spring can be linked to corresponding base node
 
                 final_finite.add_spring(
-                    f"Spring{i}",
+                    f"SpringC{i}",
                     str(i),
-                    spring_node_name,
+                    spring_node_name_compression,
                     spring_constant,
-                    tension_only=use_tension,
-                    comp_only=use_compression
+                    tension_only=False,
+                    comp_only=True
+                )
+
+                final_finite.add_spring(
+                    f"SpringT{i}",
+                    str(i),
+                    spring_node_name_tension,
+                    spring_constant,
+                    tension_only=True,
+                    comp_only=False
                 )
 
                 final_finite.def_support(
-                    spring_node_name,
+                    spring_node_name_compression,
                     support_DX=True,
                     support_DY=True,
                     support_DZ=True,
@@ -693,7 +704,15 @@ class ForceObject:
                     support_RZ=True
                 )  # Supports spring base node in all directions
 
-                use_tension, use_compression = not use_tension, not use_compression
+                final_finite.def_support(
+                    spring_node_name_tension,
+                    support_DX=True,
+                    support_DY=True,
+                    support_DZ=True,
+                    support_RX=True,
+                    support_RY=True,
+                    support_RZ=True
+                )  # Supports spring base node in all directions
                 # Alternates compression only and tension only springs to avoid model instability
 
                 # Adds supports to the base nodes
@@ -703,6 +722,7 @@ class ForceObject:
             # Checks if both nodes in edge collide with each matrix field
             # Uses walrus operator to automatically assign the index if it is true
             if (temp_mat_index := self.node_collide(edge, mat_field_coords)) != -1:
+                # These temp variables exist so regular density, E and G values are not overwritten
                 (  # This looks insane but PEP8 dictates it must be so
                     temp_density, temp_E, temp_G,
                     temp_Iy, temp_Iz, temp_J, temp_A
@@ -1065,7 +1085,7 @@ class MaterialForceWindow(QMainWindow):
         self.force_strength_z = 0.0
         # Create a validator enforcing: force values must stay between 0 and 1e10 in each direction
         only_double = QDoubleValidator()
-        only_double.setRange(0, 1e10)
+        only_double.setRange(-1e10, 1e10)
         force_input_x = QLineEdit("0")
         force_input_x.setValidator(only_double)
         force_input_x.textChanged.connect(self.set_force_x)
@@ -1135,17 +1155,23 @@ class MaterialForceWindow(QMainWindow):
         self.active_material = s
 
     def create_material_field(self, state: bool) -> None:
+        # State variable only needed to be called correctly by PyQt6, not used
         bpy.ops.mesh.primitive_cube_add()
         bpy.context.object["MATERIAL"] = self.active_material
-        bpy.context.object.color = (1, 0, 0, 1)  # Assigns a red colour to a material object
+        shd = create_new_shader("RED", (1.0, 0.0, 0.0, 1.0))
+        bpy.context.object.data.materials.append(shd)
+        print("Info: Created 1 material field")
         # The colour is a purely cosmetic change
 
     def create_force_field(self, state: bool) -> None:
+        # State variable only needed to be called correctly by PyQt6, not used
         bpy.ops.mesh.primitive_cube_add()
         bpy.context.object["FORCE_STRENGTH_X"] = self.force_strength_x
         bpy.context.object["FORCE_STRENGTH_Y"] = self.force_strength_y
         bpy.context.object["FORCE_STRENGTH_Z"] = self.force_strength_z
-        bpy.context.object.color = (0, 0, 1, 1)  # Assigns a blue colour to a force field object
+        shd = create_new_shader("BLUE", (0.0, 0.0, 1.0, 1.0))
+        bpy.context.object.data.materials.append(shd)
+        print("Info: Created 1 force field")
         # The colour is a purely cosmetic change
 
 
@@ -1262,7 +1288,7 @@ class MainWindow(QMainWindow):
         # ____________________________________
 
         # Display mass or rad number field____
-        self.mass_rad_value: float = 0.1
+        self.mass_rad_value: float = 10.0
         # Add note above edit box
         mass_rad_editor_title_widget = QLabel("Mass / Radius value (Use scientific floating point notation)")
         mass_rad_layout.addWidget(mass_rad_editor_title_widget)
@@ -1278,7 +1304,7 @@ class MainWindow(QMainWindow):
 
         # Display spring constant number field
         spring_constant_layout = QVBoxLayout()
-        self.spring_constant_val: float = 1e6
+        self.spring_constant_val: float = 1e20
         # Add note above edit box
         spring_constant_title_widget = QLabel("Base support spring constant value (Use scientific floating point "
                                               "notation)")
@@ -1742,7 +1768,7 @@ def render_finite(model: FEModel3D, deform: bool = False, save_path: str = "") -
 
     # Sets Renderer parameters
     finite_renderer.color_map = "Mx"
-    finite_renderer.annotation_size = 0.1
+    finite_renderer.annotation_size = 0.01
     finite_renderer.deformed_shape = deform
     finite_renderer.labels = False
     finite_renderer.scalar_bar = True
@@ -1757,7 +1783,7 @@ def render_finite_from_file(file_path: str, deform: bool = False) -> int:
     """ Renders a pre-analyzed FEM model from a file
     :param file_path: Filepath from which the finite element model will be loaded. This must include file name.
     :param deform: Determines whether force based deformation will be displayed upon render
-    :return: None
+    :return: int, this is returned to determine whether the model has been rendered. aids in multithreaded approach
     """
 
     # Brings global variables USE_DILL and USE_PICKLE into the function scope
@@ -1788,11 +1814,12 @@ def render_finite_from_file(file_path: str, deform: bool = False) -> int:
 
         # Sets Renderer parameters
         finite_renderer.color_map = "Mx"
-        finite_renderer.annotation_size = 0.2
+        finite_renderer.annotation_size = 0.01
         finite_renderer.deformed_shape = deform
         finite_renderer.labels = False
         finite_renderer.scalar_bar = True
-        finite_renderer.scalar_bar_text_size = 15
+        finite_renderer.render_loads = False
+        finite_renderer.scalar_bar_text_size = 10
 
         # Renders the model. This creates a new window that will lock Blender as a program in order to
         finite_renderer.render_model()
