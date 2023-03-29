@@ -94,6 +94,7 @@ Deforms considerably without support
 ![Model and it's displacement under uniform gravitational load](https://cdn.discordapp.com/attachments/553961513686269975/1090651266289500241/image.png)
 
 Material M = Light Concrete
+
 Support Material M2 = Steel (Running through the internal section of the beam)
 
 Material Mass m = 10kg
