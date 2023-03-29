@@ -105,6 +105,8 @@ Deforms still with support but not as considerably
 
 ## Model of light concrete L beam with steel support and small supporting force at beam end
 
+![Model and it's displacement under uniform gravitational load + additional vertical force](https://cdn.discordapp.com/attachments/553961513686269975/1090652730508464221/image.png)
+
 Material M = Light Concrete
 
 Support Material M2 = Steel (Running through the internal section of the beam)
