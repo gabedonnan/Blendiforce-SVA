@@ -103,6 +103,20 @@ Spring Constant K = 1e30 N/m
 
 Deforms still with support but not as considerably
 
+## Model of light concrete L beam with steel support and small supporting force at beam end
+
+Material M = Light Concrete
+
+Support Material M2 = Steel (Running through the internal section of the beam)
+
+Material Mass m = 10kg
+
+Spring Constant K = 1e30 N/m
+
+Vertical force = 5N (Seems unreasonable but constant force application even when this small can help negate gravity's effect substantially for an object with such low mass)
+
+Deforms far less, the additional force helps stabilise
+
 ## Model of steel L beam for reference
 
 ![Model and it's displacement under uniform gravitational load](https://cdn.discordapp.com/attachments/553961513686269975/1090648027565412412/image.png)
