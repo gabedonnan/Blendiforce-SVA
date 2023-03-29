@@ -73,3 +73,31 @@ Sagging and some displacement due to huge mass on weak spring (Previous iteratio
 ### Same as previous but with K = 100000
 
 ![Model and it's displacement under uniform load](https://cdn.discordapp.com/attachments/553961513686269975/1085225723310129192/image.png)
+
+
+# Final Stages Version Testing
+
+## Model of light concrete L beam without support
+
+![Model and it's displacement under uniform gravitational load](https://cdn.discordapp.com/attachments/553961513686269975/1090647490430246952/image.png)
+
+Material M = Light Concrete
+
+Material Mass m = 10kg
+
+Spring Constant K = 1e30 N/m
+
+Deforms considerably without support
+
+## Model of light concrete L beam with steel support
+
+![Model and it's displacement under uniform gravitational load](https://cdn.discordapp.com/attachments/553961513686269975/1090648027565412412/image.png)
+
+Material M = Light Concrete
+Support Material M2 = Steel (Running through the internal section of the beam)
+
+Material Mass m = 10kg
+
+Spring Constant K = 1e30 N/m
+
+Deforms still with support but not as considerably
