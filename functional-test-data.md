@@ -91,7 +91,7 @@ Deforms considerably without support
 
 ## Model of light concrete L beam with steel support
 
-![Model and it's displacement under uniform gravitational load](https://cdn.discordapp.com/attachments/553961513686269975/1090648027565412412/image.png)
+![Model and it's displacement under uniform gravitational load](https://cdn.discordapp.com/attachments/553961513686269975/1090651266289500241/image.png)
 
 Material M = Light Concrete
 Support Material M2 = Steel (Running through the internal section of the beam)
@@ -101,3 +101,13 @@ Material Mass m = 10kg
 Spring Constant K = 1e30 N/m
 
 Deforms still with support but not as considerably
+
+## Model of steel L beam for reference
+
+![Model and it's displacement under uniform gravitational load](https://cdn.discordapp.com/attachments/553961513686269975/1090648027565412412/image.png)
+
+Material Mass m = 10kg
+
+Spring Constant K = 1e30 N/m
+
+Deforms much less than concrete with or without support
