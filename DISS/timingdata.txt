@@ -1,0 +1,10 @@
+4.8225, 88, 491, N/A - Stool
+0.108, 8, 12, 6 - Cube
+120.739, 507, 1005, 500  (12 iterations to convergence) - Suzanne
+7.425328, 64, 96, 34 (2 iterations to convergence, 2 very high dimensional faces) - Cylinder (32)
+0.503, 42, 120, 80 (all triangular faces) - icosphere (2 subdiv)
+5.28,  162, 480, 320 (all triangular faces) - icosphere (3 subdiv)
+
+117.627 , 576, 1152, 576 (2 iterations to convergence) - Taurus
+375.6, 2304, 4608, 2304 (2 iterations to convergence)  - Two tauruses
+38.71, 482, 992, 512 (2 iterations) - (UV sphere)
