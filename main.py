@@ -15,6 +15,8 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
+import time
+
 try:
     import threading
     USE_THREADING = True
@@ -627,6 +629,15 @@ class ForceObject:
         # Unpacks base material
         base_density, base_E, base_G, base_Iy, base_Iz, base_J, base_A = mat.as_tup()
 
+        truth_dict = {
+            "support_DX": True,
+            "support_DY": True,
+            "support_DZ": True,
+            "support_RX": True,
+            "support_RY": True,
+            "support_RZ": True,
+        }
+
         # Gets the raw blender material objects
         bpy_objects_material = [obj for obj in bpy.data.objects if obj.get("MATERIAL") is not None]
 
@@ -636,12 +647,8 @@ class ForceObject:
         # One array contains the defining coordinates for each obj (i.e. lowest value and highest value vert)
         # The other contains the material representations of each object defined by their "MATERIAL" property
         for mat_field in bpy_objects_material:
-            min_x = math.inf
-            min_y = math.inf
-            min_z = math.inf
-            max_x = -math.inf
-            max_y = -math.inf
-            max_z = -math.inf
+            min_x, min_y, min_z = math.inf, math.inf, math.inf
+            max_x, max_y, max_z = -math.inf, -math.inf, -math.inf
             # Finds minimum and maximum vertex locations
             for force_vert in mat_field.data.vertices:
                 temp_glob = mat_field.matrix_world @ force_vert.co
@@ -661,12 +668,7 @@ class ForceObject:
             if i not in self.base_nodes:
                 final_finite.def_support(
                     str(i),
-                    support_DX=lock_dict["DX"],
-                    support_DY=lock_dict["DY"],
-                    support_DZ=lock_dict["DZ"],
-                    support_RX=lock_dict["RX"],
-                    support_RY=lock_dict["RY"],
-                    support_RZ=lock_dict["RZ"]
+                    **lock_dict
                 )
             else:
                 # Adds springs to the base nodes
@@ -696,22 +698,12 @@ class ForceObject:
 
                 final_finite.def_support(
                     spring_node_name_compression,
-                    support_DX=True,
-                    support_DY=True,
-                    support_DZ=True,
-                    support_RX=True,
-                    support_RY=True,
-                    support_RZ=True
+                    **truth_dict
                 )  # Supports spring base node in all directions
 
                 final_finite.def_support(
                     spring_node_name_tension,
-                    support_DX=True,
-                    support_DY=True,
-                    support_DZ=True,
-                    support_RX=True,
-                    support_RY=True,
-                    support_RZ=True
+                    **truth_dict
                 )  # Supports spring base node in all directions
                 # Alternates compression only and tension only springs to avoid model instability
 
@@ -780,7 +772,7 @@ class ForceObject:
     def get_centre_of_gravity(self) -> VectorType:
         """ Gets the centre of gravity of an object,
         assumes uniform mass distribution,
-        requires mass input and uses vertex locations as mass points
+        uses vertex locations as mass points
         :return: VectorTup : (x,y,z)
         """
         final = VectorTup()
@@ -1084,6 +1076,10 @@ class MaterialForceWindow(QMainWindow):
         self.force_strength_y = 0.0
         self.force_strength_z = 0.0
         # Create a validator enforcing: force values must stay between 0 and 1e10 in each direction
+        force_field_text = QLabel("Input Force Field Strength (X, Y and Z components below)")
+        force_field_text.setFont(font_20)
+        force_field_text.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        force_field_layout.addWidget(force_field_text)
         only_double = QDoubleValidator()
         only_double.setRange(-1e10, 1e10)
         force_input_x = QLineEdit("0")
@@ -1208,7 +1204,8 @@ class MainWindow(QMainWindow):
         # ____________________________________
 
         # Display axial lock checkboxes _____
-        self.lock_combo: dict = {"DX": False, "DY": False, "DZ": False, "RX": False, "RY": False, "RZ": False}
+        self.lock_combo: dict = {"support_DX": False, "support_DY": False, "support_DZ": False,
+                                 "support_RX": False, "support_RY": False, "support_RZ": False}
         lock_layout = QVBoxLayout()
 
         # Menu header text for axial locks
@@ -1379,22 +1376,22 @@ class MainWindow(QMainWindow):
     # True is represented as 2 for these functions due to PyQt6 default states
     # These all have to be different functions due to the fact that they can only be called without input
     def dx_set_state(self, state: int) -> None:
-        self.lock_combo["DX"] = (state == 2)
+        self.lock_combo["support_DX"] = (state == 2)
 
     def dy_set_state(self, state: int) -> None:
-        self.lock_combo["DY"] = (state == 2)
+        self.lock_combo["support_DY"] = (state == 2)
 
     def dz_set_state(self, state: int) -> None:
-        self.lock_combo["DZ"] = (state == 2)
+        self.lock_combo["support_DZ"] = (state == 2)
 
     def rx_set_state(self, state: int) -> None:
-        self.lock_combo["RX"] = (state == 2)
+        self.lock_combo["support_RX"] = (state == 2)
 
     def ry_set_state(self, state: int) -> None:
-        self.lock_combo["RY"] = (state == 2)
+        self.lock_combo["support_RY"] = (state == 2)
 
     def rz_set_state(self, state: int) -> None:
-        self.lock_combo["RZ"] = (state == 2)
+        self.lock_combo["support_RZ"] = (state == 2)
 
     def set_mass(self, state: bool) -> None:
         self.use_mass = state
@@ -1523,7 +1520,12 @@ def force_obj_from_raw_mass(obj: str | object, mass: float,
     global_edges = []
     for i in range(vert_num):
         temp_glob = temp_obj.matrix_world @ temp_dat.vertices[i].co  # Translation to global coords
-        global_verts.append(ForceVertex(VectorTup(temp_glob[0], temp_glob[1], temp_glob[2]), VectorTup(0, 0, 0)))
+        global_verts.append(
+            ForceVertex(
+                VectorTup(temp_glob[0], temp_glob[1], temp_glob[2]),
+                VectorTup(0, 0, 0)  # No initial force component
+            )
+        )
 
     for j in range(edge_num):
         edge_verts = temp_dat.edges[j].vertices
@@ -1739,7 +1741,10 @@ def render_finite(model: FEModel3D, deform: bool = False, save_path: str = "") -
     :return: None
     """
     # Performs Finite Element Analysis on loaded model
+    start = time.time()
     force_finite.analyze(log=True, check_statics=True)
+    end = time.time()
+    print("Time to construct and analyse:", end - start)
 
     # Brings global variables USE_DILL and USE_PICKLE into the function scope
     global USE_DILL, USE_PICKLE
@@ -1923,9 +1928,6 @@ if __name__ == "__main__":
         save_path: str = menu_window.save_path
         load_path: str = menu_window.load_path
         use_gravity: bool = True
-
-        print(save_path)
-        print(load_path)
 
         if use_mass:
             force_object_final: ForceObjType = unify_to_fobject_mass(mass_rad_value)
